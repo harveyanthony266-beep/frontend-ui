@@ -78,23 +78,51 @@ export async function fetchInvoices(): Promise<{ invoices: Invoice[]; error?: st
   }
 }
 
-export async function processInvoice(file: File): Promise<Invoice> {
+export async function processInvoice(files: File[]): Promise<Invoice[]> {
   const body = new FormData();
-  body.append('file', file);
-  const response = await requireSuccessfulResponse(await fetch(`${API_BASE}/webhooks/process-invoice`, {
+  files.forEach(file => body.append('file', file));
+  const response = await fetch(`${API_BASE}/webhooks/process-invoice`, {
     method: 'POST',
     body,
     signal: AbortSignal.timeout(12000),
-  }));
-  const data: unknown = await response.json();
-  const record = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+  });
+  if (!response.ok) {
+    let message = 'Unable to upload the selected files. Please try again.';
+    if (response.status === 413 || response.status === 422) {
+      const responseText = await response.text();
+      try {
+        const errorData: unknown = JSON.parse(responseText);
+        if (typeof errorData === 'object' && errorData !== null && 'message' in errorData) {
+          const backendMessage = (errorData as { message: unknown }).message;
+          if (typeof backendMessage === 'string') message = backendMessage;
+          else if (Array.isArray(backendMessage)) message = backendMessage.join(', ');
+        } else if (responseText) {
+          message = responseText;
+        }
+      } catch {
+        if (responseText) message = responseText;
+      }
+    }
+    throw new ApiError(response.status, message);
+  }
 
-  return {
-    ...mockInvoices[0],
-    id: String(record.invoice_number ?? 'INV-LIVE'),
-    vendor: String(record.vendor ?? file.name.replace(/\.pdf$/i, '')),
-    date: String(record.invoice_date ?? record.date ?? new Date().toLocaleDateString()),
-    amount: Number(record.total ?? 0),
-    raw: record,
-  };
+  const data: unknown = await response.json();
+  const records = Array.isArray(data)
+    ? data
+    : typeof data === 'object' && data !== null && Array.isArray((data as { invoices?: unknown }).invoices)
+      ? (data as { invoices: unknown[] }).invoices
+      : [data];
+
+  return records.map((record, index) => {
+    const item = typeof record === 'object' && record !== null ? record as Record<string, unknown> : {};
+    const file = files[index] ?? files[0];
+    return {
+      ...mockInvoices[0],
+      id: String(item.invoice_number ?? item.id ?? 'INV-LIVE'),
+      vendor: String(item.vendor ?? file?.name ?? 'Uploaded document'),
+      date: String(item.invoice_date ?? item.date ?? new Date().toLocaleDateString()),
+      amount: Number(item.total ?? item.amount ?? 0),
+      raw: item,
+    };
+  });
 }
