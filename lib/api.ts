@@ -93,6 +93,7 @@ export async function processInvoice(file: File): Promise<Invoice> {
     ...mockInvoices[0],
     id: String(record.invoice_number ?? 'INV-LIVE'),
     vendor: String(record.vendor ?? file.name.replace(/\.pdf$/i, '')),
+    date: String(record.invoice_date ?? record.date ?? new Date().toLocaleDateString()),
     amount: Number(record.total ?? 0),
     raw: record,
   };
