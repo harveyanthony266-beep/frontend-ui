@@ -76,9 +76,12 @@ async function requireSuccessfulResponse(response: Response): Promise<Response> 
   return response;
 }
 
-export async function fetchInvoices(): Promise<{ invoices: Invoice[]; error?: string; status?: number }> {
+export async function fetchInvoices(organizationId = ''): Promise<{ invoices: Invoice[]; error?: string; status?: number }> {
   try {
-    const response = await requireSuccessfulResponse(await fetch(`${API_BASE}/invoices`, {
+    const query = new URLSearchParams();
+    if (organizationId.trim()) query.set('organization_id', organizationId.trim());
+    const url = `${API_BASE}/invoices${query.size ? `?${query.toString()}` : ''}`;
+    const response = await requireSuccessfulResponse(await fetch(url, {
       signal: AbortSignal.timeout(8000),
       cache: 'no-store',
     }));
