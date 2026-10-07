@@ -42,8 +42,8 @@ export class ApiError extends Error {
 
 export async function checkBackend(): Promise<boolean> {
   try {
-    const response = await fetch(API_BASE, {
-      method: 'HEAD',
+    const response = await fetch(`${API_BASE}/health`, {
+      method: 'GET',
       signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
