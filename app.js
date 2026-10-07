@@ -1,5 +1,5 @@
 const API_BASE = 'https://ghost-business.onrender.com';
-const USE_MOCK = true;
+const USE_MOCK = false;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'xlsx', 'xls', 'csv', 'docx', 'txt', 'eml']);
 const POLL_INTERVAL_MS = 3000;

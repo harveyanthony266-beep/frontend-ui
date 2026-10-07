@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UploadCloud, AlertTriangle, X, Download, FileSpreadsheet } from 'lucide-react';
-import { ApiError, processInvoice, ProcessedDocument } from '@/lib/api';
+import { ApiError, processInvoice, ProcessedDocument, verifyApiKey } from '@/lib/api';
 import { downloadProcessedInvoicesCsv, downloadProcessedInvoicesXlsx } from '@/lib/invoice-export';
 import { toast } from 'sonner';
 
@@ -37,6 +37,12 @@ export default function UploadPage() {
   const [storageLoaded, setStorageLoaded] = useState(false);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [verifiedKey, setVerifiedKey] = useState('');
+  const [organization, setOrganization] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [profile, setProfile] = useState('');
+  const [waking, setWaking] = useState(false);
 
   useEffect(() => {
     setDocuments(readStoredDocuments());
@@ -49,6 +55,25 @@ export default function UploadPage() {
 
   const selectedDocuments = documents.filter(document => selectedKeys.includes(document.key));
   const allSelected = documents.length > 0 && selectedDocuments.length === documents.length;
+  const keyVerified = Boolean(apiKey.trim()) && verifiedKey === apiKey.trim();
+
+  async function verifyKey() {
+    const key = apiKey.trim();
+    if (!key || verifying || keyVerified) return;
+    setVerifying(true);
+    setError('');
+    try {
+      const name = await verifyApiKey(key);
+      if (key === apiKey.trim()) {
+        setVerifiedKey(key);
+        setOrganization(name);
+      }
+    } catch (verificationError) {
+      setError(verificationError instanceof Error ? verificationError.message : 'Unable to verify access key.');
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   async function exportSelected() {
     if (!selectedDocuments.length) return;
@@ -69,18 +94,30 @@ export default function UploadPage() {
       setError('Each file must be 25 MB or smaller.');
       return;
     }
+    if (!keyVerified) {
+      setError('Verify your access key before uploading.');
+      return;
+    }
 
     setError('');
     setLoading(true);
+    const wakingTimer = window.setTimeout(() => setWaking(true), 8000);
     try {
-      const invoices = await processInvoice(files);
-      setDocuments(current => [...current, ...invoices]);
-      toast.success('Files uploaded successfully.');
-    } catch (requestError) {
-      setError(requestError instanceof ApiError && (requestError.status === 413 || requestError.status === 422)
-        ? requestError.message
-        : GENERIC_UPLOAD_ERROR);
+      const results = await Promise.allSettled(files.map(file => processInvoice(file, apiKey.trim(), profile)));
+      const successful = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+      const failures = results.flatMap(result => {
+        if (result.status === 'fulfilled') return [];
+        return [result.reason instanceof ApiError ? result.reason.message : GENERIC_UPLOAD_ERROR];
+      });
+      if (successful.length) {
+        setDocuments(current => [...current, ...successful]);
+        toast.success(`${successful.length} document${successful.length === 1 ? '' : 's'} processed.`);
+      }
+      if (failures.length) setError(failures.join(' '));
+      if (!successful.length && !failures.length) setError(GENERIC_UPLOAD_ERROR);
     } finally {
+      window.clearTimeout(wakingTimer);
+      setWaking(false);
       setLoading(false);
     }
   }
@@ -109,12 +146,32 @@ export default function UploadPage() {
       <p className="text-xs uppercase tracking-[.25em] text-mint">Document intake</p>
       <h1 className="mt-2 text-3xl font-semibold">Upload documents</h1>
       <p className="mt-2 text-sm text-slate-400">Upload one or more files of any type, up to 25 MB each.</p>
+      {organization && <p className="mt-2 text-sm text-emerald-400">Connected as {organization}</p>}
     </div>
     {error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300">
       <AlertTriangle size={18} />
       <span className="flex-1">{error}</span>
       <button onClick={() => setError('')} aria-label="Dismiss error"><X size={17} /></button>
     </div>}
+    <div className="grid gap-3 rounded-xl border border-line bg-panel p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+      <div>
+        <label htmlFor="access-key" className="mb-2 block text-sm text-slate-300">Access key</label>
+        <input id="access-key" type="password" autoComplete="off" value={apiKey} onChange={event => {
+          setApiKey(event.target.value);
+          setVerifiedKey('');
+          setOrganization('');
+          setError('');
+        }} onBlur={() => void verifyKey()} onKeyDown={event => {
+          if (event.key === 'Enter') void verifyKey();
+        }} className="w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-white outline-none focus:border-emerald" placeholder="Enter your backend access key" />
+        {keyVerified && <p className="mt-2 text-sm text-emerald-400">Connected as {organization}</p>}
+      </div>
+      <button onClick={() => void verifyKey()} disabled={!apiKey.trim() || verifying || keyVerified} className="rounded-lg border border-line px-4 py-2 text-sm text-slate-200 hover:bg-white/5 disabled:opacity-50">{verifying ? 'Verifying…' : 'Verify key'}</button>
+    </div>
+    <label className="block text-sm text-slate-300">Document profile <span className="text-slate-500">(optional)</span>
+      <input value={profile} onChange={event => setProfile(event.target.value)} className="mt-2 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-white outline-none focus:border-emerald" placeholder="For example: vendor invoices" />
+    </label>
+    {waking && <div role="status" className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-sm text-amber-200">Waking up the server, this can take up to a minute.</div>}
     <div
       onDragOver={event => { event.preventDefault(); setDrag(true); }}
       onDragLeave={() => setDrag(false)}
@@ -129,7 +186,7 @@ export default function UploadPage() {
       <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald/10 text-emerald"><UploadCloud size={30} /></div>
       <h2 className="mt-5 font-medium">Drop your files here</h2>
       <p className="mt-2 text-sm text-slate-500">or choose files from your computer · up to 25 MB each</p>
-      <button disabled={loading || !storageLoaded} onClick={() => ref.current?.click()} className="mt-6 rounded-lg bg-emerald px-5 py-2.5 text-sm font-semibold text-ink disabled:opacity-50">
+      <button disabled={loading || !storageLoaded || !keyVerified} onClick={() => ref.current?.click()} className="mt-6 rounded-lg bg-emerald px-5 py-2.5 text-sm font-semibold text-ink disabled:opacity-50">
         {loading ? 'Uploading files…' : 'Choose files'}
       </button>
     </div>

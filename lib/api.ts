@@ -40,6 +40,22 @@ export class ApiError extends Error {
   }
 }
 
+export async function verifyApiKey(apiKey: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/me`, {
+    headers: { 'x-api-key': apiKey },
+    signal: AbortSignal.timeout(60000),
+    cache: 'no-store',
+  });
+  if (response.status === 401) throw new ApiError(401, "That access key isn't valid. Check it and try again.");
+  if (response.status === 429) throw new ApiError(429, 'Too many attempts, wait a minute and try again.');
+  if (!response.ok) throw new ApiError(response.status, 'Unable to verify access key. Please try again.');
+  const data: unknown = await response.json();
+  if (typeof data !== 'object' || data === null || !('organization_name' in data) || typeof data.organization_name !== 'string') {
+    throw new ApiError(response.status, 'The backend returned an invalid organization response.');
+  }
+  return data.organization_name;
+}
+
 export async function checkBackend(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE}/health`, {
@@ -94,46 +110,40 @@ export async function fetchInvoices(): Promise<{ invoices: Invoice[]; error?: st
   }
 }
 
-export async function processInvoice(files: File[]): Promise<ProcessedDocument[]> {
+export async function processInvoice(file: File, apiKey: string, profile = ''): Promise<ProcessedDocument[]> {
   const body = new FormData();
-  files.forEach(file => body.append('file', file));
+  body.append('file', file);
+  body.append('profile', profile);
   const response = await fetch(`${API_BASE}/webhooks/process-invoice`, {
     method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'Idempotency-Key': crypto.randomUUID(),
+    },
     body,
-    signal: AbortSignal.timeout(12000),
+    signal: AbortSignal.timeout(5 * 60 * 1000),
   });
   if (!response.ok) {
-    let message = 'Unable to upload the selected files. Please try again.';
-    if (response.status === 413 || response.status === 422) {
-      const responseText = await response.text();
-      try {
-        const errorData: unknown = JSON.parse(responseText);
-        if (typeof errorData === 'object' && errorData !== null && 'message' in errorData) {
-          const backendMessage = (errorData as { message: unknown }).message;
-          if (typeof backendMessage === 'string') message = backendMessage;
-          else if (Array.isArray(backendMessage)) message = backendMessage.join(', ');
-        } else if (responseText) {
-          message = responseText;
-        }
-      } catch {
-        if (responseText) message = responseText;
-      }
-    }
-    throw new ApiError(response.status, message);
+    throw await uploadError(response);
   }
 
-  const data: unknown = await response.json();
-  const records = Array.isArray(data)
-    ? data
-    : typeof data === 'object' && data !== null && Array.isArray((data as { invoices?: unknown }).invoices)
-      ? (data as { invoices: unknown[] }).invoices
-      : [data];
+  const responseData: unknown = await response.json();
+  let envelope = typeof responseData === 'object' && responseData !== null
+    ? responseData as Record<string, unknown>
+    : {};
+  if (typeof envelope.job_id === 'string' && envelope.data === undefined) {
+    envelope = await pollInvoiceJob(envelope.job_id, apiKey);
+  }
+  if (envelope.success === false) {
+    throw new ApiError(response.status, typeof envelope.message === 'string' ? envelope.message : 'The backend could not process this file.');
+  }
+  const data = Object.prototype.hasOwnProperty.call(envelope, 'data') ? envelope.data : responseData;
+  const records = Array.isArray(data) ? data : data && typeof data === 'object' ? [data] : [];
 
   const optionalInvoiceFields = ['po_number', 'subtotal', 'discount', 'freight', 'tax'];
   const optionalLineFields = ['quantity', 'unit_price'];
   return records.map((record, index) => {
     const item = typeof record === 'object' && record !== null ? record as Record<string, unknown> : {};
-    const file = files[index] ?? files[0];
     const lineItems = Array.isArray(item.line_items) ? item.line_items : [];
     const optionalFields: Record<string, unknown> = {};
     optionalInvoiceFields.forEach(field => {
@@ -153,7 +163,7 @@ export async function processInvoice(files: File[]): Promise<ProcessedDocument[]
 
     return {
       key: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
-      filename: file?.name ?? 'Uploaded document',
+      filename: file.name,
       id: typeof item.id === 'string' || typeof item.id === 'number' ? item.id : 'unknown',
       created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
       vendor_name: String(item.vendor_name ?? ''),
@@ -167,4 +177,52 @@ export async function processInvoice(files: File[]): Promise<ProcessedDocument[]
       optional_fields: optionalFields,
     };
   });
+}
+
+async function uploadError(response: Response): Promise<ApiError> {
+  const defaults: Record<number, string> = {
+    400: 'Unable to process this file. Please check it and try again.',
+    401: "That access key isn't valid. Check it and try again.",
+    413: 'File too large.',
+    422: 'Unsupported or unreadable file.',
+    429: 'Too many requests. Wait a minute and retry.',
+  };
+  let message = defaults[response.status] ?? 'Unable to upload this file. Please try again.';
+  try {
+    const body: unknown = await response.json();
+    if (typeof body === 'object' && body !== null && 'message' in body) {
+      const value = (body as { message: unknown }).message;
+      if (typeof value === 'string' && value.trim()) message = value;
+      else if (Array.isArray(value) && value.length) message = value.join(', ');
+    }
+  } catch {
+    // Use the status-specific message when the backend response has no JSON body.
+  }
+  return new ApiError(response.status, message);
+}
+
+async function pollInvoiceJob(jobId: string, apiKey: string): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 5 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const response = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`, {
+      headers: { 'x-api-key': apiKey },
+      cache: 'no-store',
+    });
+    if (!response.ok) throw await uploadError(response);
+    const body: unknown = await response.json();
+    if (typeof body !== 'object' || body === null) continue;
+    const job = body as Record<string, unknown>;
+    if (job.data !== undefined) return job;
+    const status = String(job.status ?? '').toLowerCase();
+    if (['done', 'complete', 'completed', 'success', 'succeeded'].includes(status)) {
+      const data = job.result ?? job.output ?? job.documents;
+      if (data !== undefined) return { data };
+      throw new ApiError(response.status, 'The job completed without returning document data.');
+    }
+    if (['failed', 'error'].includes(status)) {
+      throw new ApiError(response.status, typeof job.message === 'string' ? job.message : 'Document processing failed.');
+    }
+  }
+  throw new ApiError(408, 'Document processing timed out. Please try again.');
 }
