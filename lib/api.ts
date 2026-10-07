@@ -8,6 +8,22 @@ export type Invoice = {
   raw: Record<string, unknown>;
 };
 
+export type ProcessedDocument = {
+  key: string;
+  filename: string;
+  id: string | number;
+  created_at?: string;
+  vendor_name: string;
+  invoice_date: string;
+  invoice_number: string | number;
+  total_amount: number;
+  line_items: { description: string; amount: number; [key: string]: unknown }[];
+  status: string;
+  organization_id?: string | number;
+  processed_at?: string;
+  optional_fields: Record<string, unknown>;
+};
+
 export const mockInvoices: Invoice[] = [
   { id: 'INV-2409-001', vendor: 'Northstar Logistics', date: 'Sep 11, 2026', amount: 8420.5, status: 'Processed', items: [{ description: 'Freight services', quantity: 1, price: 8420.5 }], raw: { invoice_number: 'INV-2409-001', currency: 'USD' } },
   { id: 'INV-2409-002', vendor: 'Greenfield Supply Co.', date: 'Sep 10, 2026', amount: 1299, status: 'Review', items: [{ description: 'Industrial supplies', quantity: 3, price: 433 }], raw: { invoice_number: 'INV-2409-002', currency: 'USD' } },
@@ -78,7 +94,7 @@ export async function fetchInvoices(): Promise<{ invoices: Invoice[]; error?: st
   }
 }
 
-export async function processInvoice(files: File[]): Promise<Invoice[]> {
+export async function processInvoice(files: File[]): Promise<ProcessedDocument[]> {
   const body = new FormData();
   files.forEach(file => body.append('file', file));
   const response = await fetch(`${API_BASE}/webhooks/process-invoice`, {
@@ -113,16 +129,42 @@ export async function processInvoice(files: File[]): Promise<Invoice[]> {
       ? (data as { invoices: unknown[] }).invoices
       : [data];
 
+  const optionalInvoiceFields = ['po_number', 'subtotal', 'discount', 'freight', 'tax'];
+  const optionalLineFields = ['quantity', 'unit_price'];
   return records.map((record, index) => {
     const item = typeof record === 'object' && record !== null ? record as Record<string, unknown> : {};
     const file = files[index] ?? files[0];
+    const lineItems = Array.isArray(item.line_items) ? item.line_items : [];
+    const optionalFields: Record<string, unknown> = {};
+    optionalInvoiceFields.forEach(field => {
+      if (Object.prototype.hasOwnProperty.call(item, field)) optionalFields[field] = item[field];
+    });
+    const processedLineItems: ProcessedDocument['line_items'] = lineItems.map(line => {
+      const source = typeof line === 'object' && line !== null ? line as Record<string, unknown> : {};
+      const processedLine: ProcessedDocument['line_items'][number] = {
+        description: String(source.description ?? ''),
+        amount: typeof source.amount === 'number' ? source.amount : Number(source.amount ?? 0),
+      };
+      optionalLineFields.forEach(field => {
+        if (Object.prototype.hasOwnProperty.call(source, field)) processedLine[field] = source[field];
+      });
+      return processedLine;
+    });
+
     return {
-      ...mockInvoices[0],
-      id: String(item.invoice_number ?? item.id ?? 'INV-LIVE'),
-      vendor: String(item.vendor ?? file?.name ?? 'Uploaded document'),
-      date: String(item.invoice_date ?? item.date ?? new Date().toLocaleDateString()),
-      amount: Number(item.total ?? item.amount ?? 0),
-      raw: item,
+      key: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+      filename: file?.name ?? 'Uploaded document',
+      id: typeof item.id === 'string' || typeof item.id === 'number' ? item.id : 'unknown',
+      created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
+      vendor_name: String(item.vendor_name ?? ''),
+      invoice_date: String(item.invoice_date ?? ''),
+      invoice_number: typeof item.invoice_number === 'string' || typeof item.invoice_number === 'number' ? item.invoice_number : '',
+      total_amount: typeof item.total_amount === 'number' ? item.total_amount : Number(item.total_amount ?? 0),
+      line_items: processedLineItems,
+      status: String(item.status ?? ''),
+      organization_id: typeof item.organization_id === 'string' || typeof item.organization_id === 'number' ? item.organization_id : undefined,
+      processed_at: typeof item.processed_at === 'string' ? item.processed_at : undefined,
+      optional_fields: optionalFields,
     };
   });
 }
