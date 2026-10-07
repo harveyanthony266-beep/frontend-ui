@@ -3,11 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MagicHeart Nexus turns paperwork into spreadsheet-ready data.">
+  <meta name="description" content="MagicHeart Nexus secure organization workspace setup.">
   <title>MagicHeart Nexus</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-  <script src="app.js" defer></script>
 </head>
 <body>
   <main class="app-shell">
@@ -18,95 +16,28 @@
       </a>
       <div class="header-aside">
         <p class="tagline">Turn paperwork into spreadsheet-ready data.</p>
-        <p id="organization-header" class="organization-header" hidden></p>
       </div>
     </header>
 
-    <section class="card settings-card" aria-labelledby="settings-title">
-      <div class="section-heading">
-        <div>
-          <h2 id="settings-title">Connection settings</h2>
-          <p>Add your access key to connect to the document service.</p>
-        </div>
-        <span class="settings-icon" aria-hidden="true">⚙</span>
-      </div>
-      <label class="field-label" for="api-key">Access key</label>
-      <div class="key-entry">
-        <input id="api-key" class="text-input key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your API access key">
-        <button id="verify-key" class="button button-secondary" type="button">Verify</button>
-      </div>
-      <p id="verification-message" class="verification-message" role="status" aria-live="polite" hidden></p>
-      <p id="verification-waking" class="waking-message verification-waking" role="status" hidden><span class="spinner" aria-hidden="true"></span>Waking up the server, this can take up to a minute.</p>
-      <p class="field-hint">Your key is kept only in this page and is cleared when you leave.</p>
-    </section>
-
-    <section class="card upload-card" aria-labelledby="upload-title">
-      <div class="section-heading">
-        <div>
-          <h1 id="upload-title">Upload documents</h1>
-          <p>Extract useful details from invoices and other paperwork.</p>
-        </div>
-        <span class="step-count">01 <span>/ 03</span></span>
-      </div>
-
-      <label class="field-label" for="profile">Document profile <span class="optional-label">Optional</span></label>
-      <input id="profile" class="text-input profile-input" type="text" placeholder="For example: US vendor invoices">
-
-      <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-label="Choose documents or drop files here">
-        <div class="upload-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <p class="drop-title">Drop files here, or <span>browse</span></p>
-        <p class="drop-subtitle">PDF, images, spreadsheets, documents, email, and text</p>
-        <p class="drop-limit">Up to 25 MB per file</p>
-      </div>
-      <input id="file-input" type="file" class="visually-hidden" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.txt,.eml">
-      <p class="privacy-note">Documents are processed with AI, and results are stored securely in your account. Contact us about retention options.</p>
-
-      <div id="validation-message" class="message message-error" role="alert" hidden></div>
-      <div id="file-list" class="file-list" aria-live="polite"></div>
-
-      <div class="upload-actions">
-        <p id="mock-hint" class="mock-hint"></p>
-        <button id="extract-button" class="button button-primary" type="button" disabled>Extract data <span aria-hidden="true">→</span></button>
-      </div>
-      <div id="waking-message" class="waking-message" role="status" hidden><span class="spinner" aria-hidden="true"></span>Waking up the server, this can take up to a minute.</div>
-    </section>
-
-    <section id="results-section" class="card results-card" aria-labelledby="results-title" hidden>
-      <div class="section-heading results-heading">
-        <div>
-          <p class="eyebrow">02 / REVIEW</p>
-          <h2 id="results-title">Extracted data</h2>
-          <p id="results-summary">Check the details and correct anything that needs attention.</p>
-        </div>
-        <span id="document-count" class="count-badge">0 documents</span>
-      </div>
-      <div id="results-table-wrap" class="table-wrap"></div>
-      <div id="results-empty" class="empty-state" hidden>No documents have been extracted yet.</div>
-    </section>
-
-    <section id="export-section" class="export-bar" hidden aria-label="Export extracted data">
+    <section class="card setup-notice" aria-labelledby="setup-title">
+      <span class="setup-lock" aria-hidden="true">!</span>
       <div>
-        <p class="eyebrow">03 / EXPORT</p>
-        <h2>Your spreadsheet is ready</h2>
-        <p>Download your current, edited results whenever you are ready.</p>
-      </div>
-      <div class="export-actions">
-        <button id="export-excel" class="button button-primary" type="button"><span aria-hidden="true">↓</span> Download Excel</button>
-        <button id="export-csv" class="button button-secondary" type="button"><span aria-hidden="true">↓</span> Download CSV</button>
+        <p class="eyebrow">Secure access not configured</p>
+        <h1 id="setup-title">Your documents are protected while we connect your workspace.</h1>
+        <p>This interface is not connected to document data. Sign-in, server-side organization membership checks, and a trusted backend-for-frontend must be configured before organizations, uploads, or documents can be accessed.</p>
+        <p class="setup-detail">No API key is requested or sent from this browser. Organization access must be verified by the server for every request.</p>
       </div>
     </section>
 
-    <section id="empty-state" class="empty-explainer" aria-label="How it works">
+    <section class="empty-explainer" aria-label="How MagicHeart Nexus works">
       <div class="explainer-copy">
         <p class="eyebrow">A clearer way to handle paperwork</p>
         <h2>From document to decision,<br>without the busywork.</h2>
       </div>
       <ol class="steps-list">
-        <li><span class="step-number">1</span><span><strong>Upload</strong><small>Add your documents securely.</small></span></li>
-        <li><span class="step-number">2</span><span><strong>Review</strong><small>Check and correct extracted details.</small></span></li>
-        <li><span class="step-number">3</span><span><strong>Export</strong><small>Take your data with you.</small></span></li>
+        <li><span class="step-number">1</span><span><strong>Choose an organization</strong><small>Access only workspaces authorized for your account.</small></span></li>
+        <li><span class="step-number">2</span><span><strong>Process and review</strong><small>Upload documents and resolve review flags.</small></span></li>
+        <li><span class="step-number">3</span><span><strong>Keep your archive</strong><small>Find documents for your authorized organization.</small></span></li>
       </ol>
     </section>
 
