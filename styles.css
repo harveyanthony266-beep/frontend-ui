@@ -45,6 +45,12 @@ a { color: inherit; }
 .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--blue); color: white; font-family: Georgia, serif; font-size: 20px; font-weight: 500; }
 .tagline { margin: 0; color: var(--muted); font-size: 13px; }
 .card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 2px 8px #1a36500a; }
+.setup-notice { display: flex; align-items: flex-start; gap: 16px; margin: 14px 0 20px; padding: 24px; }
+.setup-lock { flex: 0 0 auto; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--yellow); color: #886812; font-weight: 750; }
+.setup-notice .eyebrow { margin-bottom: 7px; }
+.setup-notice h1 { margin-bottom: 9px; }
+.setup-notice p:not(.eyebrow) { max-width: 680px; margin-bottom: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.setup-notice .setup-detail { margin-top: 10px; font-size: 11px !important; }
 .settings-card { margin-bottom: 16px; padding: 20px 24px; }
 .upload-card { padding: 25px 28px 22px; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -151,6 +157,7 @@ td { padding: 7px 6px; border-bottom: 1px solid #edf0f3; vertical-align: top; }
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 24px, 960px); }
   .site-header { align-items: flex-start; flex-direction: column; gap: 4px; padding: 19px 0 16px; }
+  .setup-notice { padding: 18px; }
   .header-aside { padding-left: 44px; text-align: left; }
   .tagline { font-size: 12px; }
   .key-entry { align-items: stretch; }

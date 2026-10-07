@@ -1,185 +1,178 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { UploadCloud, AlertTriangle, X, Download, FileSpreadsheet } from 'lucide-react';
-import { ApiError, processInvoice, ProcessedDocument } from '@/lib/api';
-import { downloadProcessedInvoicesCsv, downloadProcessedInvoicesXlsx } from '@/lib/invoice-export';
-import { toast } from 'sonner';
+import { useRef, useState } from 'react';
+import { FileUp, LoaderCircle, LockKeyhole, X } from 'lucide-react';
+import { WorkspaceSetupNotice } from '@/components/workspace-setup-notice';
+import { useWorkspace } from '@/components/workspace-provider';
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024;
-const GENERIC_UPLOAD_ERROR = 'Unable to upload the selected files. Please try again.';
-const STORAGE_KEY = 'processed-invoices';
+type UploadOutcome = {
+  filename: string;
+  success: boolean;
+  statusCode?: number;
+  message?: string;
+  data?: Record<string, unknown>;
+};
 
-function readStoredDocuments(): ProcessedDocument[] {
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_FILES = 10;
+
+async function responseMessage(response: Response) {
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? '[]');
-    return Array.isArray(value)
-      ? value.filter((document): document is ProcessedDocument =>
-        typeof document === 'object' && document !== null &&
-        'key' in document && typeof document.key === 'string' &&
-        'filename' in document && typeof document.filename === 'string' &&
-        'line_items' in document && Array.isArray(document.line_items))
-      : [];
+    const result = await response.json();
+    return typeof result.message === 'string' ? result.message : 'Upload failed.';
   } catch {
-    return [];
+    return 'Upload failed.';
   }
 }
 
 export default function UploadPage() {
-  const ref = useRef<HTMLInputElement>(null);
-  const router = useRouter();
-  const [drag, setDrag] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [documents, setDocuments] = useState<ProcessedDocument[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [format, setFormat] = useState<'xlsx' | 'csv'>('xlsx');
-  const [storageLoaded, setStorageLoaded] = useState(false);
+  const { organizationId, organization, status } = useWorkspace();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [outcomes, setOutcomes] = useState<UploadOutcome[]>([]);
   const [error, setError] = useState('');
-  const [exporting, setExporting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const ready = status === 'ready' && Boolean(organizationId);
 
-  useEffect(() => {
-    setDocuments(readStoredDocuments());
-    setStorageLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (storageLoaded) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(documents));
-  }, [documents, storageLoaded]);
-
-  const selectedDocuments = documents.filter(document => selectedKeys.includes(document.key));
-  const allSelected = documents.length > 0 && selectedDocuments.length === documents.length;
-
-  async function exportSelected() {
-    if (!selectedDocuments.length) return;
-    setExporting(true);
-    try {
-      if (format === 'csv') downloadProcessedInvoicesCsv(selectedDocuments);
-      else await downloadProcessedInvoicesXlsx(selectedDocuments);
-    } catch {
-      setError(`Unable to create the ${format.toUpperCase()} download. Please try again.`);
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  async function handle(files: File[]) {
-    if (!files.length) return;
-    if (files.some(file => file.size > MAX_FILE_SIZE)) {
-      setError('Each file must be 25 MB or smaller.');
+  function selectFiles(selected: FileList | null) {
+    const nextFiles = Array.from(selected ?? []);
+    setError('');
+    setOutcomes([]);
+    if (nextFiles.length > MAX_FILES) {
+      setFiles([]);
+      setError(`Choose no more than ${MAX_FILES} files at a time.`);
       return;
     }
+    const tooLarge = nextFiles.find((file) => file.size > MAX_FILE_BYTES);
+    if (tooLarge) {
+      setFiles([]);
+      setError(`${tooLarge.name} exceeds the 25 MB per-file limit.`);
+      return;
+    }
+    setFiles(nextFiles);
+  }
 
+  async function pollJob(jobId: string): Promise<UploadOutcome[]> {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await fetch(`/api/backend/jobs/${encodeURIComponent(jobId)}`, {
+        headers: { 'x-organization-id': organizationId },
+        cache: 'no-store',
+      });
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const job = await response.json();
+      if (job.status === 'failed') {
+        throw new Error(job.error ?? 'The document batch failed.');
+      }
+      if (job.status === 'completed' || job.status === 'completed_with_errors') {
+        return Array.isArray(job.results) ? job.results : [];
+      }
+    }
+    throw new Error('Processing is taking longer than expected. Check the archive later.');
+  }
+
+  async function upload() {
+    if (!ready || !files.length || busy) return;
+    setBusy(true);
     setError('');
-    setLoading(true);
+    setOutcomes([]);
+    const form = new FormData();
+    files.forEach((file) => form.append('file', file, file.name));
     try {
-      const invoices = await processInvoice(files);
-      setDocuments(current => [...current, ...invoices]);
-      toast.success('Files uploaded successfully.');
-    } catch (requestError) {
-      setError(requestError instanceof ApiError && (requestError.status === 413 || requestError.status === 422)
-        ? requestError.message
-        : GENERIC_UPLOAD_ERROR);
+      const response = await fetch('/api/backend/webhooks/process-invoice', {
+        method: 'POST',
+        headers: {
+          'x-organization-id': organizationId,
+          'idempotency-key': crypto.randomUUID(),
+        },
+        body: form,
+      });
+      if (!response.ok) throw new Error(await responseMessage(response));
+      const result = await response.json();
+      if (result.job_id) {
+        setOutcomes(await pollJob(result.job_id));
+      } else if (Array.isArray(result.results)) {
+        setOutcomes(result.results);
+      } else if (result.success) {
+        const rows = Array.isArray(result.data) ? result.data : [result.data];
+        setOutcomes(rows.map((row: Record<string, unknown>) => ({
+          filename: String(row.original_filename ?? files[0]?.name ?? 'Uploaded file'),
+          success: true,
+          data: row,
+        })));
+      } else {
+        throw new Error('The backend returned an unexpected upload response.');
+      }
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = '';
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = '';
-    void handle(files);
-  }
-
-  function toggleSelected(key: string) {
-    setSelectedKeys(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key]);
-  }
-
-  function toggleAll() {
-    setSelectedKeys(allSelected ? [] : documents.map(document => document.key));
-  }
-
-  function removeSelected() {
-    setDocuments(current => current.filter(document => !selectedKeys.includes(document.key)));
-    setSelectedKeys([]);
-  }
-
-  return <div className="mx-auto max-w-6xl space-y-8">
+  return <div className="mx-auto max-w-4xl space-y-8">
     <div>
       <p className="text-xs uppercase tracking-[.25em] text-mint">Document intake</p>
       <h1 className="mt-2 text-3xl font-semibold">Upload documents</h1>
-      <p className="mt-2 text-sm text-slate-400">Upload one or more files of any type, up to 25 MB each.</p>
+      <p className="mt-2 text-sm text-slate-400">
+        {organization ? `Files will be added to ${organization.name}.` : 'Select an authorized organization to begin.'}
+      </p>
     </div>
-    {error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300">
-      <AlertTriangle size={18} />
-      <span className="flex-1">{error}</span>
-      <button onClick={() => setError('')} aria-label="Dismiss error"><X size={17} /></button>
-    </div>}
-    <div
-      onDragOver={event => { event.preventDefault(); setDrag(true); }}
-      onDragLeave={() => setDrag(false)}
-      onDrop={event => {
-        event.preventDefault();
-        setDrag(false);
-        void handle(Array.from(event.dataTransfer.files));
-      }}
-      className={`rounded-2xl border-2 border-dashed p-12 text-center transition ${drag ? 'border-emerald bg-emerald/10' : 'border-line bg-panel'}`}
-    >
-      <input ref={ref} type="file" multiple className="hidden" onChange={handleInputChange} />
-      <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald/10 text-emerald"><UploadCloud size={30} /></div>
-      <h2 className="mt-5 font-medium">Drop your files here</h2>
-      <p className="mt-2 text-sm text-slate-500">or choose files from your computer · up to 25 MB each</p>
-      <button disabled={loading || !storageLoaded} onClick={() => ref.current?.click()} className="mt-6 rounded-lg bg-emerald px-5 py-2.5 text-sm font-semibold text-ink disabled:opacity-50">
-        {loading ? 'Uploading files…' : 'Choose files'}
-      </button>
-    </div>
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Processed documents ({documents.length})</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-slate-400">{selectedKeys.length} selected</span>
-          <select value={format} onChange={event => setFormat(event.target.value as 'xlsx' | 'csv')} className="rounded-lg border border-line bg-panel px-3 py-2 text-sm text-slate-200">
-            <option value="xlsx">Excel (.xlsx)</option>
-            <option value="csv">CSV</option>
-          </select>
-          <button onClick={() => void exportSelected()} disabled={!selectedKeys.length || exporting} className="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-4 py-2 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-50">
-            <Download size={15} />{exporting ? 'Preparing…' : 'Export selected'}
-          </button>
-          <button onClick={removeSelected} disabled={!selectedKeys.length} className="rounded-lg border border-line px-4 py-2 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-50">
-            Remove from list
+
+    {!ready ? <WorkspaceSetupNotice /> : (
+      <section className="rounded-2xl border border-dashed border-line bg-panel p-7 sm:p-10" aria-labelledby="upload-title">
+        <input
+          ref={inputRef}
+          className="sr-only"
+          type="file"
+          multiple
+          disabled={!ready || busy}
+          onChange={(event) => selectFiles(event.target.files)}
+          aria-label="Choose documents to upload"
+        />
+        <div className="text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/5 text-mint"><FileUp size={26} aria-hidden="true" /></div>
+          <h2 id="upload-title" className="mt-5 text-lg font-semibold text-white">Add documents to this workspace</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-400">Choose up to 10 files, each no larger than 25 MB. Supported formats include PDF, PNG, JPG, WEBP, HEIC, XLSX, XLS, CSV, DOCX, TXT, and EML.</p>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-white/10 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/15 disabled:opacity-50"
+          >
+            Choose files
           </button>
         </div>
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-        <table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="border-b border-line text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3"><input type="checkbox" aria-label="Select all documents" checked={allSelected} onChange={toggleAll} /></th>
-              <th className="px-4 py-3">Vendor</th>
-              <th className="px-4 py-3">Invoice number</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3">Filename</th>
-              <th className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {documents.map(document => <tr key={document.key}>
-              <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${document.filename}`} checked={selectedKeys.includes(document.key)} onChange={() => toggleSelected(document.key)} /></td>
-              <td className="px-4 py-3">{document.vendor_name || 'Unknown vendor'}</td>
-              <td className="px-4 py-3">{document.invoice_number || document.id}</td>
-              <td className="px-4 py-3">{document.invoice_date}</td>
-              <td className="px-4 py-3">{document.total_amount.toLocaleString()}</td>
-              <td className="px-4 py-3">{document.filename}</td>
-              <td className="px-4 py-3">{document.status === 'needs_review'
-                ? <span className="rounded-full bg-amber-400/10 px-2 py-1 text-xs text-amber-300">Needs review</span>
-                : document.status}</td>
-            </tr>)}
-            {!documents.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No processed documents yet.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <button onClick={() => router.push('/invoices')} className="rounded-lg px-2 py-2 text-sm text-mint hover:bg-white/5">View invoice archive</button>
-    </section>
+
+        {files.length > 0 && (
+          <div className="mx-auto mt-7 max-w-2xl space-y-2">
+            {files.map((file, index) => (
+              <div key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-ink/60 px-3 py-2 text-sm">
+                <span className="truncate text-slate-200">{file.name} <span className="text-xs text-slate-500">({(file.size / 1024 / 1024).toFixed(2)} MB)</span></span>
+                <button type="button" disabled={busy} aria-label={`Remove ${file.name}`} onClick={() => setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded p-1 text-slate-500 hover:text-white disabled:opacity-40"><X size={16} /></button>
+              </div>
+            ))}
+            <button type="button" onClick={() => void upload()} disabled={busy} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald px-5 py-3 text-sm font-semibold text-ink disabled:opacity-50">
+              {busy ? <><LoaderCircle size={16} className="animate-spin" /> Processing securely…</> : <><LockKeyhole size={16} /> Upload {files.length} file{files.length === 1 ? '' : 's'}</>}
+            </button>
+          </div>
+        )}
+      </section>
+    )}
+
+    {error && <p role="alert" className="rounded-lg border border-rose-900/50 bg-rose-950/20 p-4 text-sm text-rose-200">{error}</p>}
+    {outcomes.length > 0 && (
+      <section aria-live="polite" className="space-y-2">
+        <h2 className="font-semibold text-white">Upload results</h2>
+        {outcomes.map((outcome, index) => (
+          <div key={`${outcome.filename}-${index}`} className={`rounded-lg border p-4 text-sm ${outcome.success ? 'border-emerald-900/50 bg-emerald-950/20 text-mint' : 'border-amber-900/50 bg-amber-950/20 text-amber-200'}`}>
+            <p className="font-medium">{outcome.success ? 'Processed' : 'Needs attention'}: {outcome.filename}</p>
+            {!outcome.success && outcome.message && <p className="mt-1 text-slate-300">{outcome.message}</p>}
+          </div>
+        ))}
+      </section>
+    )}
   </div>;
 }

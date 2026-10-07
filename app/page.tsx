@@ -1,2 +1,49 @@
-﻿import Link from 'next/link'; import type { ElementType } from 'react'; import { ArrowUpRight, FileText, UploadCloud, Clock3, CheckCircle2 } from 'lucide-react'; import { mockInvoices } from '@/lib/api';
-export default function Dashboard(){ const total=mockInvoices.reduce((a,b)=>a+b.amount,0); const stats: Array<[string,string,string,ElementType]> = [['Total processed','$'+total.toLocaleString(),'+18.4%',FileText],['Awaiting review','12','-2.1%',Clock3],['Success rate','98.7%','+0.8%',CheckCircle2],['This month','$24,890','+12.6%',ArrowUpRight]]; return <div className="space-y-8"><section className="grid-bg relative overflow-hidden rounded-2xl border border-line p-7 shadow-glow lg:p-10"><div className="max-w-2xl"><p className="mb-3 text-xs font-semibold uppercase tracking-[.25em] text-mint">Good morning, Anthony</p><h1 className="text-3xl font-semibold tracking-tight text-white lg:text-5xl">Your financial control room<span className="text-mint">.</span></h1><p className="mt-4 max-w-xl text-sm leading-6 text-slate-400">Process invoices faster, keep your archive clean, and stay ahead of every approval.</p><div className="mt-7 flex flex-wrap gap-3"><Link href="/upload" className="inline-flex items-center gap-2 rounded-lg bg-emerald px-4 py-2.5 text-sm font-semibold text-ink hover:bg-mint"><UploadCloud size={17}/> Upload invoice</Link><Link href="/invoices" className="inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5">View archive <ArrowUpRight size={16}/></Link></div></div><div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-emerald/10 blur-3xl"/></section><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(([label,value,delta,Icon])=><div key={label} className="rounded-xl border border-line bg-panel p-5"><div className="flex items-center justify-between text-slate-500"><span className="text-xs uppercase tracking-wider">{label}</span><Icon size={17} className="text-emerald"/></div><div className="mt-4 text-2xl font-semibold text-white">{value}</div><div className="mt-2 text-xs text-emerald">{delta} <span className="text-slate-500">vs last period</span></div></div>)}</div><section className="rounded-xl border border-line bg-panel p-5"><div className="mb-5 flex items-center justify-between"><div><h2 className="font-semibold">Recent activity</h2><p className="mt-1 text-xs text-slate-500">Latest documents across your workspace</p></div><Link href="/invoices" className="text-xs text-mint hover:underline">See all</Link></div><div className="divide-y divide-line">{mockInvoices.slice(0,3).map(i=><div key={i.id} className="flex items-center gap-4 py-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald/10 text-emerald"><FileText size={17}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm text-slate-200">{i.vendor}</div><div className="text-xs text-slate-500">{i.id} · {i.date}</div></div><div className="text-right"><div className="text-sm">${i.amount.toLocaleString()}</div><div className="text-xs text-emerald">{i.status}</div></div></div>)}</div></section></div> }
+'use client';
+
+import Link from 'next/link';
+import { Archive, FileCheck2, FileUp, ShieldCheck } from 'lucide-react';
+import { WorkspaceSetupNotice } from '@/components/workspace-setup-notice';
+import { useWorkspace } from '@/components/workspace-provider';
+
+const steps = [
+  { number: '01', title: 'Choose an organization', description: 'See only workspaces your signed-in account is allowed to access.', Icon: ShieldCheck },
+  { number: '02', title: 'Process and review', description: 'Upload documents, inspect extracted fields, and resolve review flags.', Icon: FileCheck2 },
+  { number: '03', title: 'Keep your archive', description: 'Find documents and export records for your authorized organization.', Icon: Archive },
+];
+
+export default function Dashboard() {
+  const { status, organization } = useWorkspace();
+  const ready = status === 'ready';
+  return <div className="mx-auto max-w-5xl space-y-8">
+    <section className="grid-bg relative overflow-hidden rounded-2xl border border-line p-7 shadow-glow lg:p-10">
+      <div className="relative z-10 max-w-2xl">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[.25em] text-mint">MagicHeart Nexus</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-white lg:text-5xl">Paperwork, made clear<span className="text-mint">.</span></h1>
+        <p className="mt-4 max-w-xl text-sm leading-6 text-slate-400">
+          {ready && organization
+            ? `You are working in ${organization.name}. Upload documents, review extracted fields, and keep organization records in order.`
+            : 'A secure workspace for processing documents, reviewing extracted fields, and keeping organization records in order.'}
+        </p>
+        {ready && <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/upload" className="inline-flex items-center gap-2 rounded-lg bg-emerald px-4 py-2.5 text-sm font-semibold text-ink"><FileUp size={16} aria-hidden="true" /> Upload documents</Link>
+          <Link href="/invoices" className="inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-white hover:bg-white/5"><Archive size={16} aria-hidden="true" /> Open archive</Link>
+        </div>}
+      </div>
+      <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-emerald/10 blur-3xl" />
+    </section>
+
+    {!ready && status !== 'loading' && <WorkspaceSetupNotice />}
+
+    <section aria-label="How MagicHeart Nexus works" className="grid gap-4 md:grid-cols-3">
+      {steps.map(({ number, title, description, Icon }) => <article key={number} className="rounded-xl border border-line bg-panel p-5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold tracking-[.16em] text-mint">{number}</span>
+          <Icon size={18} className="text-slate-400" aria-hidden="true" />
+        </div>
+        <h2 className="mt-5 text-base font-semibold text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-5 text-slate-400">{description}</p>
+      </article>)}
+    </section>
+    {!ready && <div className="flex items-center gap-2 text-xs text-slate-500"><FileUp size={15} aria-hidden="true" /> Upload and archive actions become available after organization access is verified.</div>}
+  </div>;
+}
