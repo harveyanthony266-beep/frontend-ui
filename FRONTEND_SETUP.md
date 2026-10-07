@@ -27,9 +27,18 @@
    to its backend API key. This value and `SUPABASE_SERVICE_ROLE_KEY` are
    server-only secrets: do not add a `NEXT_PUBLIC_` prefix, put them in
    browser code, or commit real values.
-6. Deploy/restart the frontend and verify the backend's authenticated `GET
+6. In Supabase **Authentication → URL Configuration**, set the **Site URL** to
+   the deployed frontend origin and add that origin with `/**` to the allowed
+   redirect URLs. Dashboard-generated invite links may return to the site root;
+   the frontend routes Supabase auth callback parameters to its callback
+   handler.
+7. Deploy/restart the frontend and verify the backend's authenticated `GET
    /me` endpoint is available. A user can upload or view data only after the
    selected organization has membership and backend verification succeeds.
+
+Invited users open the Supabase invitation link, set their own password on the
+frontend, and then continue to the workspace. Deploy the callback and password
+setup routes before sending invites.
 
 The upload endpoint accepts one or more multipart entries named `file` (up to
 10 files per request). The browser posts only to the same-origin BFF; it never

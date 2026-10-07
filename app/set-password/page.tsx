@@ -1,42 +1,45 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { LockKeyhole } from 'lucide-react';
 
-export default function LoginPage() {
+export default function SetPasswordPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('invite') === 'invalid') {
-      setError('This invitation link is invalid or expired. Ask your administrator to send a new one.');
-    }
-  }, []);
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setError('');
+    if (password !== confirmPassword) {
+      setError('The passwords do not match.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Your password must be at least 8 characters.');
+      return;
+    }
+
+    setBusy(true);
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/set-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ password }),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => null);
-        setError(result?.message ?? 'Sign-in failed. Try again.');
+        setError(result?.message ?? 'Could not set your password.');
         return;
       }
       router.replace('/');
       router.refresh();
     } catch {
-      setError('Sign-in is unavailable right now. Try again.');
+      setError('Password setup is temporarily unavailable. Try again.');
     } finally {
       setBusy(false);
     }
@@ -50,47 +53,44 @@ export default function LoginPage() {
             <LockKeyhole size={20} aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Sign in to MagicHeart</h1>
-            <p className="text-sm text-slate-400">Use your invited workspace account.</p>
+            <h1 className="text-xl font-semibold">Create your password</h1>
+            <p className="text-sm text-slate-400">Finish setting up your invited account.</p>
           </div>
         </div>
         <form className="space-y-4" onSubmit={submit}>
           <label className="block text-sm text-slate-300">
-            Email
+            New password
             <input
-              autoComplete="username"
-              className="mt-2 w-full rounded-lg border border-line bg-ink px-3 py-2.5 text-white outline-none focus:border-mint"
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label className="block text-sm text-slate-300">
-            Password
-            <input
-              autoComplete="current-password"
+              autoComplete="new-password"
               className="mt-2 w-full rounded-lg border border-line bg-ink px-3 py-2.5 text-white outline-none focus:border-mint"
               type="password"
+              minLength={8}
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
           </label>
-          {error && (
-            <p role="alert" className="text-sm text-rose-300">{error}</p>
-          )}
+          <label className="block text-sm text-slate-300">
+            Confirm password
+            <input
+              autoComplete="new-password"
+              className="mt-2 w-full rounded-lg border border-line bg-ink px-3 py-2.5 text-white outline-none focus:border-mint"
+              type="password"
+              minLength={8}
+              required
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </label>
+          {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
           <button
             className="w-full rounded-lg bg-emerald px-4 py-3 text-sm font-semibold text-ink disabled:opacity-50"
             type="submit"
             disabled={busy}
           >
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? 'Saving password…' : 'Set password'}
           </button>
         </form>
-        <p className="mt-5 text-xs leading-5 text-slate-500">
-          Accounts are provisioned by your workspace administrator. No API key is entered or stored in this browser.
-        </p>
       </section>
     </main>
   );
