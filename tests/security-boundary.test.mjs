@@ -42,6 +42,30 @@ test('server-side proxy authorizes organization membership before attaching its 
   assert.match(access, /process\.env\.BACKEND_ORG_API_KEYS/);
 });
 
+test('organization loading failures log server-side reason codes without secrets', async () => {
+  const access = await readFile(new URL('../lib/server/organization-access.ts', import.meta.url), 'utf8');
+  const organizations = await readFile(new URL('../app/api/organizations/route.ts', import.meta.url), 'utf8');
+  const proxy = await readFile(new URL('../app/api/backend/[...segments]/route.ts', import.meta.url), 'utf8');
+  const middleware = await readFile(new URL('../middleware.ts', import.meta.url), 'utf8');
+  for (const reason of [
+    'no_membership',
+    'org_not_found',
+    'no_key_for_org',
+    'key_map_invalid',
+    'supabase_query_failed',
+    'missing_environment_variable',
+  ]) {
+    assert.match(access + organizations + proxy + middleware, new RegExp(reason));
+  }
+  assert.match(access, /supabase_error_code: redact\(supabaseCode\)/);
+  assert.match(access, /supabase_error_message: redact\(supabaseMessage\)/);
+  assert.match(access, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(access, /NEXT_PUBLIC_SUPABASE_ANON_KEY/);
+  assert.match(access, /createHash\('sha256'\)\.update\(secret\)\.digest\('hex'\)/);
+  assert.match(proxy, /reason_code: 'backend_me_failed'/);
+  assert.doesNotMatch(browserSource, /organization_access_failed|reason_code/);
+});
+
 test('production client bundles contain no backend URLs or API-key configuration', async context => {
   const staticDirectory = new URL('../.next/static/', import.meta.url);
   try {

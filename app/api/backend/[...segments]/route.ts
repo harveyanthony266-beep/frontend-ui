@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { authorizeOrganization } from '@/lib/server/organization-access';
+import {
+  authorizeOrganization,
+  logOrganizationAccessFailure,
+  OrganizationAccessError,
+} from '@/lib/server/organization-access';
 
 type RouteContext = {
   params: { segments: string[] };
@@ -53,6 +57,13 @@ async function proxyRequest(request: Request, context: RouteContext) {
 
   const backendUrl = process.env.BACKEND_API_URL;
   if (!backendUrl) {
+    logOrganizationAccessFailure(
+      new OrganizationAccessError(
+        'missing_environment_variable',
+        'Document backend URL is not configured.',
+        { variable: 'BACKEND_API_URL' },
+      ),
+    );
     return errorResponse(
       503,
       'Service Unavailable',
@@ -67,6 +78,13 @@ async function proxyRequest(request: Request, context: RouteContext) {
       `${backendUrl.replace(/\/+$/, '')}/`,
     );
   } catch {
+    logOrganizationAccessFailure(
+      new OrganizationAccessError(
+        'backend_url_invalid',
+        'Document backend URL is invalid.',
+        { variable: 'BACKEND_API_URL' },
+      ),
+    );
     return errorResponse(503, 'Service Unavailable', 'Document backend URL is invalid.');
   }
   upstreamUrl.search = new URL(request.url).search;
@@ -76,12 +94,27 @@ async function proxyRequest(request: Request, context: RouteContext) {
     data: { user },
     error: authError,
   } = await authClient.auth.getUser();
+  if (authError) {
+    logOrganizationAccessFailure(
+      new OrganizationAccessError(
+        'supabase_query_failed',
+        'Supabase user authentication lookup failed.',
+        {
+          query: 'auth.getUser',
+          supabaseCode: authError.code ?? 'unknown',
+          supabaseMessage: authError.message,
+        },
+      ),
+    );
+  }
   if (authError || !user) {
     return errorResponse(401, 'Unauthorized', 'Sign in to continue.');
   }
 
   const isHealthRoute = method === 'GET' && segments.join('/') === 'health';
+  const isMeRoute = method === 'GET' && segments.join('/') === 'me';
   let apiKey: string | undefined;
+  let authorizedOrganizationName: string | undefined;
   if (!isHealthRoute) {
     const organizationId = request.headers.get('x-organization-id');
     if (!organizationId) {
@@ -93,7 +126,9 @@ async function proxyRequest(request: Request, context: RouteContext) {
         return errorResponse(403, 'Forbidden', 'You do not have access to this organization.');
       }
       apiKey = organization.apiKey;
-    } catch {
+      authorizedOrganizationName = organization.name;
+    } catch (error) {
+      logOrganizationAccessFailure(error);
       return errorResponse(
         503,
         'Service Unavailable',
@@ -142,6 +177,15 @@ async function proxyRequest(request: Request, context: RouteContext) {
       signal: AbortSignal.timeout(120_000),
     });
   } catch (error) {
+    if (isMeRoute) {
+      console.error(JSON.stringify({
+        event: 'organization_access_failed',
+        reason_code: 'backend_me_failed',
+        cause: error instanceof DOMException && error.name === 'TimeoutError'
+          ? 'timeout'
+          : 'unreachable',
+      }));
+    }
     return errorResponse(
       error instanceof DOMException && error.name === 'TimeoutError' ? 504 : 502,
       error instanceof DOMException && error.name === 'TimeoutError'
@@ -149,6 +193,23 @@ async function proxyRequest(request: Request, context: RouteContext) {
         : 'Bad Gateway',
       'The document backend could not be reached.',
     );
+  }
+
+  if (isMeRoute && !upstream.ok) {
+    console.error(JSON.stringify({
+      event: 'organization_access_failed',
+      reason_code: 'backend_me_failed',
+      status: upstream.status,
+    }));
+  } else if (isMeRoute && authorizedOrganizationName) {
+    const verification = await upstream.clone().json().catch(() => null);
+    if (verification?.organization_name !== authorizedOrganizationName) {
+      console.error(JSON.stringify({
+        event: 'organization_access_failed',
+        reason_code: 'backend_me_failed',
+        cause: 'organization_mismatch',
+      }));
+    }
   }
 
   const responseHeaders = new Headers();

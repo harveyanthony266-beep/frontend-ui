@@ -17,6 +17,13 @@ export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
+    console.error(JSON.stringify({
+      event: 'organization_access_failed',
+      reason_code: 'missing_environment_variable',
+      variable: !url
+        ? 'NEXT_PUBLIC_SUPABASE_URL'
+        : 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    }));
     if (request.nextUrl.pathname.startsWith('/api/')) {
       return NextResponse.json(
         {
