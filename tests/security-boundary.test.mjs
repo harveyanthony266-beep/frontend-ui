@@ -71,3 +71,17 @@ test('upload and archive are gated on verified organization access', () => {
   assert.match(source[2], /x-organization-id/);
   assert.doesNotMatch(source[1] + source[2], /<input[^>]*(organization|org.?id)/i);
 });
+
+test('invite acceptance sets a password only after a verified Supabase session', async () => {
+  const callback = await readFile(new URL('../app/auth/callback/route.ts', import.meta.url), 'utf8');
+  const setPassword = await readFile(new URL('../app/api/auth/set-password/route.ts', import.meta.url), 'utf8');
+  const passwordPage = await readFile(new URL('../app/set-password/page.tsx', import.meta.url), 'utf8');
+  const middleware = await readFile(new URL('../middleware.ts', import.meta.url), 'utf8');
+  assert.match(callback, /exchangeCodeForSession\(code\)/);
+  assert.match(callback, /verifyOtp\([\s\S]*type: 'invite'/);
+  assert.match(callback, /new URL\('\/set-password'/);
+  assert.match(setPassword, /supabase\.auth\.getUser\(\)/);
+  assert.match(setPassword, /supabase\.auth\.updateUser\(\{\s*password:/);
+  assert.match(passwordPage, /\/api\/auth\/set-password/);
+  assert.match(middleware, /hasInviteCallback/);
+});

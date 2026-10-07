@@ -2,6 +2,18 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  const isAuthCallback =
+    request.nextUrl.pathname === '/auth/callback';
+  const hasInviteCallback =
+    request.nextUrl.searchParams.has('code') ||
+    (request.nextUrl.searchParams.has('token_hash') &&
+      request.nextUrl.searchParams.get('type') === 'invite');
+  if (hasInviteCallback && !isAuthCallback) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = '/auth/callback';
+    return NextResponse.rewrite(callbackUrl);
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
@@ -48,7 +60,7 @@ export async function middleware(request: NextRequest) {
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
   const isLoginRoute = request.nextUrl.pathname === '/login';
 
-  if (!user && !isApiRoute && !isLoginRoute) {
+  if (!user && !isApiRoute && !isLoginRoute && !isAuthCallback) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.searchParams.set('next', request.nextUrl.pathname);
