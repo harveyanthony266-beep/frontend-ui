@@ -1,7 +1,21 @@
+export type UpstreamBodyError = {
+  status: number;
+  error: string;
+  message: string;
+};
+
 export type PreparedUpstreamBody = {
   body?: ArrayBuffer;
   contentType?: string;
+  error?: UpstreamBodyError;
 };
+
+export type PrepareUpstreamBodyOptions = {
+  requireMultipart?: boolean;
+};
+
+const MAX_UPLOAD_FILES = 10;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 type MultipartFilePart = {
   filename: string;
@@ -101,14 +115,15 @@ function logUpload(filename: string, contentType: string, bytes: Uint8Array) {
   );
 }
 
-function logMultipartUpload(bytes: Uint8Array, contentType: string) {
-  let files: MultipartFilePart[] = [];
+function readMultipartFiles(bytes: Uint8Array, contentType: string): MultipartFilePart[] {
   try {
-    files = multipartFileParts(bytes, contentType);
+    return multipartFileParts(bytes, contentType);
   } catch {
-    files = [];
+    return [];
   }
+}
 
+function logMultipartUpload(bytes: Uint8Array, contentType: string, files: MultipartFilePart[]) {
   if (files.length === 0) {
     console.info(`forwarding upload bytes=${bytes.length} prefix=${bytePrefix(bytes)}`);
     return;
@@ -119,22 +134,62 @@ function logMultipartUpload(bytes: Uint8Array, contentType: string) {
   }
 }
 
-export async function prepareUpstreamBody(request: Request): Promise<PreparedUpstreamBody> {
+function uploadLimitError(files: MultipartFilePart[]): UpstreamBodyError | null {
+  if (files.length > MAX_UPLOAD_FILES) {
+    return {
+      status: 400,
+      error: 'Bad Request',
+      message: `Choose no more than ${MAX_UPLOAD_FILES} files at a time.`,
+    };
+  }
+
+  const tooLarge = files.find((file) => file.bytes.byteLength > MAX_UPLOAD_BYTES);
+  if (tooLarge) {
+    const filename = tooLarge.filename.trim() || 'A file';
+    return {
+      status: 413,
+      error: 'Payload Too Large',
+      message: `${filename} exceeds the 25 MB per-file limit.`,
+    };
+  }
+
+  return null;
+}
+
+export async function prepareUpstreamBody(
+  request: Request,
+  options: PrepareUpstreamBodyOptions = {},
+): Promise<PreparedUpstreamBody> {
   const method = request.method.toUpperCase();
   if (method === 'GET' || method === 'HEAD') return {};
 
   const contentType = request.headers.get('content-type') ?? '';
+  const isMultipart = contentType.toLowerCase().startsWith('multipart/form-data');
+  if (options.requireMultipart && !isMultipart) {
+    return {
+      error: {
+        status: 400,
+        error: 'Bad Request',
+        message: 'Upload must use multipart form data.',
+      },
+    };
+  }
+
   const body = await request.arrayBuffer();
+  if (!isMultipart) {
+    return {
+      body,
+      contentType: contentType || undefined,
+    };
+  }
 
   // Forward the original multipart bytes. Rebuilding FormData copies each file
   // through a new Blob and can change PDF bytes that the backend then rejects.
-  if (contentType.toLowerCase().startsWith('multipart/form-data')) {
-    logMultipartUpload(new Uint8Array(body), contentType);
-    return { body, contentType };
-  }
+  const bytes = new Uint8Array(body);
+  const files = readMultipartFiles(bytes, contentType);
+  const limitError = uploadLimitError(files);
+  if (limitError) return { error: limitError };
 
-  return {
-    body,
-    contentType: contentType || undefined,
-  };
+  logMultipartUpload(bytes, contentType, files);
+  return { body, contentType };
 }

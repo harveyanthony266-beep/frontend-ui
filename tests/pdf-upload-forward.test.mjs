@@ -112,7 +112,7 @@ test('forwards a real PDF fixture with identical bytes', async () => {
 test('upload proxy does not rebuild multipart bodies or read them as text', async () => {
   const route = await readFile(new URL('../app/api/backend/[...segments]/route.ts', import.meta.url), 'utf8');
   const helper = await readFile(new URL('../lib/server/prepare-upstream-body.ts', import.meta.url), 'utf8');
-  assert.match(route, /prepareUpstreamBody\(request\)/);
+  assert.match(route, /prepareUpstreamBody\(request/);
   assert.match(route, /body: upstreamBody\.body/);
   assert.doesNotMatch(route, /new FormData|\.text\(|toString\('utf8'\)/);
   assert.doesNotMatch(helper, /\.text\(|toString\('utf8'\)|TextEncoder|TextDecoder/);

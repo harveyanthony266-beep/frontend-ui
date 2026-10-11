@@ -108,7 +108,17 @@ async function proxyRequest(request: Request, context: RouteContext) {
   const idempotencyKey = request.headers.get('idempotency-key');
   if (idempotencyKey) headers.set('idempotency-key', idempotencyKey);
 
-  const upstreamBody = await prepareUpstreamBody(request);
+  const isInvoiceUpload = method === 'POST' && segments.join('/') === 'webhooks/process-invoice';
+  const upstreamBody = await prepareUpstreamBody(request, {
+    requireMultipart: isInvoiceUpload,
+  });
+  if (upstreamBody.error) {
+    return errorResponse(
+      upstreamBody.error.status,
+      upstreamBody.error.error,
+      upstreamBody.error.message,
+    );
+  }
   if (upstreamBody.contentType) headers.set('content-type', upstreamBody.contentType);
 
   let upstream: Response;
