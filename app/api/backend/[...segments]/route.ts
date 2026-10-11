@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { authorizeOrganization } from '@/lib/server/organization-access';
+import { prepareUpstreamBody } from '@/lib/server/prepare-upstream-body';
 
 type RouteContext = {
   params: { segments: string[] };
@@ -107,37 +108,25 @@ async function proxyRequest(request: Request, context: RouteContext) {
   const idempotencyKey = request.headers.get('idempotency-key');
   if (idempotencyKey) headers.set('idempotency-key', idempotencyKey);
 
-  let body: BodyInit | undefined;
-  if (method !== 'GET' && method !== 'HEAD') {
-    const contentType = request.headers.get('content-type') ?? '';
-    if (contentType.toLowerCase().startsWith('multipart/form-data')) {
-      let incomingForm: FormData;
-      try {
-        incomingForm = await request.formData();
-      } catch {
-        return errorResponse(400, 'Bad Request', 'Invalid multipart upload.');
-      }
-      const outgoingForm = new FormData();
-      incomingForm.forEach((value, name) => {
-        if (typeof value === 'string') {
-          outgoingForm.append(name, value);
-        } else {
-          outgoingForm.append(name, value, value.name);
-        }
-      });
-      body = outgoingForm;
-    } else {
-      if (contentType) headers.set('content-type', contentType);
-      body = await request.arrayBuffer();
-    }
+  const isInvoiceUpload = method === 'POST' && segments.join('/') === 'webhooks/process-invoice';
+  const upstreamBody = await prepareUpstreamBody(request, {
+    requireMultipart: isInvoiceUpload,
+  });
+  if (upstreamBody.error) {
+    return errorResponse(
+      upstreamBody.error.status,
+      upstreamBody.error.error,
+      upstreamBody.error.message,
+    );
   }
+  if (upstreamBody.contentType) headers.set('content-type', upstreamBody.contentType);
 
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl, {
       method,
       headers,
-      body,
+      body: upstreamBody.body,
       cache: 'no-store',
       signal: AbortSignal.timeout(120_000),
     });

@@ -7,7 +7,7 @@
     "build": "next build",
     "lint": "next lint",
     "start": "next start",
-    "test": "node --test tests/security-boundary.test.mjs"
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/register-alias-loader.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
