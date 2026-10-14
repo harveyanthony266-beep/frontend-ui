@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Archive, LayoutDashboard, LockKeyhole, UploadCloud, X } from 'lucide-react';
+import { useWorkspace } from '@/components/workspace-provider';
 
 const links = [
   ['/', 'Overview', LayoutDashboard],
@@ -12,6 +13,18 @@ const links = [
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const path = usePathname();
+  const { status, organization, error } = useWorkspace();
+  const ready = status === 'ready';
+  const pendingDetail =
+    status === 'loading'
+      ? 'Loading workspaces…'
+      : status === 'verifying'
+        ? 'Verifying access…'
+        : status === 'unselected' || error === 'You do not have access to that organization.'
+          ? 'No organization membership.'
+          : error === 'Sign in to continue.'
+            ? 'Not signed in.'
+            : 'Organization verification failed.';
   return <>
     <div className={`fixed inset-0 z-30 bg-black/60 lg:hidden ${open ? 'block' : 'hidden'}`} onClick={onClose} />
     <aside className={`fixed z-40 flex h-screen w-72 flex-col border-r border-line bg-ink p-5 transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -28,8 +41,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </Link>,
       )}</nav>
       <div className="mt-auto rounded-xl border border-line bg-panel/80 p-4">
-        <div className="flex items-center gap-2 text-xs text-slate-300"><LockKeyhole size={15} className="text-amber-300" /> Secure setup pending</div>
-        <p className="mt-2 text-xs leading-5 text-slate-500">Organization data stays disconnected until server-side sign-in and authorization are configured.</p>
+        <div className={`flex items-center gap-2 text-xs ${ready ? 'text-mint' : 'text-slate-300'}`}>
+          <LockKeyhole size={15} className={ready ? 'text-mint' : 'text-amber-300'} />
+          {ready ? 'Secure connection verified' : 'Secure setup pending'}
+        </div>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          {ready ? organization?.name ?? 'Verified' : pendingDetail}
+        </p>
       </div>
     </aside>
   </>;
