@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Archive, Download, Search } from 'lucide-react';
+import { Archive, Download, Search, Trash2 } from 'lucide-react';
 import { WorkspaceSetupNotice } from '@/components/workspace-setup-notice';
 import { useWorkspace } from '@/components/workspace-provider';
 import type { InvoiceDocument } from '@/lib/api';
@@ -21,6 +21,10 @@ function amount(value: number | null, currency: string | null) {
   }).format(value);
 }
 
+function documentName(document: InvoiceDocument) {
+  return document.document_number ?? document.invoice_number ?? document.original_filename ?? 'Untitled document';
+}
+
 export default function Invoices() {
   const { organizationId, status: workspaceStatus } = useWorkspace();
   const [query, setQuery] = useState('');
@@ -30,6 +34,8 @@ export default function Invoices() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
   const ready = workspaceStatus === 'ready' && Boolean(organizationId);
 
   const loadDocuments = useCallback(async () => {
@@ -63,6 +69,10 @@ export default function Invoices() {
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [organizationId, page, query, status]);
 
   async function exportXlsx() {
     if (!ready) return;
@@ -101,6 +111,52 @@ export default function Invoices() {
     }
   }
 
+  async function deleteDocuments(ids: string[]) {
+    if (!ready || deleting || ids.length === 0) return;
+    const noun = ids.length === 1 ? 'invoice' : 'invoices';
+    if (!window.confirm(`Delete ${ids.length} ${noun}? This can't be undone.`)) return;
+
+    setDeleting(true);
+    setError('');
+    const deletedIds: string[] = [];
+    const failures: string[] = [];
+
+    await Promise.all(ids.map(async (id) => {
+      const document = archive?.data.find((item) => item.id === id);
+      const name = document ? documentName(document) : id;
+      try {
+        const response = await fetch(`/api/backend/documents/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { 'x-organization-id': organizationId },
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          failures.push(`${name}: ${result?.message ?? 'Could not delete this invoice.'}`);
+          return;
+        }
+        deletedIds.push(id);
+      } catch (deleteError) {
+        failures.push(`${name}: ${deleteError instanceof Error ? deleteError.message : 'Could not delete this invoice.'}`);
+      }
+    }));
+
+    if (deletedIds.length > 0) {
+      setArchive((current) => current && ({
+        ...current,
+        data: current.data.filter((document) => !deletedIds.includes(document.id)),
+        total: Math.max(0, current.total - deletedIds.length),
+      }));
+      setSelectedIds((current) => current.filter((id) => !deletedIds.includes(id)));
+    }
+    if (failures.length > 0) {
+      setError(`Could not delete ${failures.length === 1 ? 'this invoice' : 'these invoices'}. ${failures.join(' ')}`);
+    }
+    setDeleting(false);
+  }
+
+  const visibleIds = archive?.data.map((document) => document.id) ?? [];
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
   return <div className="mx-auto max-w-6xl space-y-7">
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
@@ -108,14 +164,26 @@ export default function Invoices() {
         <h1 className="mt-2 text-3xl font-semibold">Organization archive</h1>
         <p className="mt-2 text-sm text-slate-400">Only documents belonging to your authorized organization are shown.</p>
       </div>
-      <button
-        type="button"
-        disabled={!ready || exporting}
-        onClick={() => void exportXlsx()}
-        className="inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm text-slate-200 hover:bg-white/5 disabled:opacity-50"
-      >
-        <Download size={16} aria-hidden="true" /> {exporting ? 'Preparing…' : 'Export XLSX'}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        {selectedIds.length > 0 && (
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() => void deleteDocuments(selectedIds)}
+            className="inline-flex items-center gap-2 rounded-lg border border-rose-900/60 px-4 py-2.5 text-sm text-rose-200 hover:bg-rose-950/30 disabled:opacity-50"
+          >
+            <Trash2 size={16} aria-hidden="true" /> Delete {selectedIds.length}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={!ready || exporting}
+          onClick={() => void exportXlsx()}
+          className="inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm text-slate-200 hover:bg-white/5 disabled:opacity-50"
+        >
+          <Download size={16} aria-hidden="true" /> {exporting ? 'Preparing…' : 'Export XLSX'}
+        </button>
+      </div>
     </div>
 
     <section className="rounded-xl border border-line bg-panel p-4" aria-label="Archive filters">
@@ -166,15 +234,47 @@ export default function Invoices() {
     ) : archive?.data.length ? (
       <>
         <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="border-b border-line text-xs uppercase tracking-wide text-slate-500">
-              <tr><th className="px-4 py-3">Document</th><th className="px-4 py-3">Vendor</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Status</th></tr>
+              <tr>
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(element) => {
+                      if (element) element.indeterminate = selectedIds.length > 0 && !allSelected;
+                    }}
+                    onChange={(event) => setSelectedIds(event.target.checked ? visibleIds : [])}
+                    disabled={deleting}
+                    aria-label="Select all invoices on this page"
+                  />
+                </th>
+                <th className="px-4 py-3">Document</th>
+                <th className="px-4 py-3">Vendor</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3"><span className="sr-only">Delete</span></th>
+              </tr>
             </thead>
             <tbody className="divide-y divide-line/70">
               {archive.data.map((document) => (
                 <tr key={document.id} className="align-top hover:bg-white/[.02]">
                   <td className="px-4 py-4">
-                    <div className="font-medium text-slate-100">{document.document_number ?? document.invoice_number ?? document.original_filename ?? 'Untitled document'}</div>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(document.id)}
+                      onChange={() => setSelectedIds((current) => (
+                        current.includes(document.id)
+                          ? current.filter((id) => id !== document.id)
+                          : [...current, document.id]
+                      ))}
+                      disabled={deleting}
+                      aria-label={`Select ${documentName(document)}`}
+                    />
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="font-medium text-slate-100">{documentName(document)}</div>
                     <div className="mt-1 text-xs text-slate-500">{document.document_type ?? 'document'}</div>
                   </td>
                   <td className="px-4 py-4 text-slate-300">{document.vendor_name ?? '—'}</td>
@@ -185,6 +285,17 @@ export default function Invoices() {
                     {document.status === 'needs_review' && Boolean(document.review_reasons?.length) && (
                       <p className="mt-2 max-w-56 text-xs leading-5 text-amber-300">{document.review_reasons?.join('; ')}</p>
                     )}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={() => void deleteDocuments([document.id])}
+                      aria-label={`Delete ${documentName(document)}`}
+                      className="rounded p-1 text-slate-500 hover:text-rose-300 disabled:opacity-40"
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                    </button>
                   </td>
                 </tr>
               ))}
