@@ -15,6 +15,14 @@ type UploadOutcome = {
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_FILES = 10;
+const delayedProcessingMessage = 'File uploaded. Processing is taking longer than usual, and it will appear in your documents for review.';
+
+function isUploadTimeout(error: unknown) {
+  return error instanceof Error && (
+    error.name === 'TimeoutError' ||
+    /timeout|timed out/i.test(error.message)
+  );
+}
 
 async function responseMessage(response: Response) {
   try {
@@ -79,15 +87,31 @@ export default function UploadPage() {
     const form = new FormData();
     files.forEach((file) => form.append('file', file, file.name));
     try {
-      const response = await fetch('/api/backend/webhooks/process-invoice', {
-        method: 'POST',
-        headers: {
-          'x-organization-id': organizationId,
-          'idempotency-key': crypto.randomUUID(),
-        },
-        body: form,
-      });
-      if (!response.ok) throw new Error(await responseMessage(response));
+      let response: Response;
+      try {
+        response = await fetch('/api/backend/webhooks/process-invoice', {
+          method: 'POST',
+          headers: {
+            'x-organization-id': organizationId,
+            'idempotency-key': crypto.randomUUID(),
+          },
+          body: form,
+        });
+      } catch (networkError) {
+        if (isUploadTimeout(networkError)) throw new Error(delayedProcessingMessage);
+        throw networkError;
+      }
+      if (response.status === 502 || response.status === 504) {
+        throw new Error(delayedProcessingMessage);
+      }
+      if (!response.ok) {
+        const message = await responseMessage(response);
+        throw new Error(
+          message === 'Upload failed.' && response.status >= 500
+            ? delayedProcessingMessage
+            : message,
+        );
+      }
       const result = await response.json();
       if (result.job_id) {
         setOutcomes(await pollJob(result.job_id));
