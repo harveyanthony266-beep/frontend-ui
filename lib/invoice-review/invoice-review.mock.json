@@ -1,0 +1,885 @@
+[
+  {
+    "document_id": "doc_rb_20418",
+    "document_type": "vendor_invoice",
+    "source_file": "RB-20418-riverbend.pdf",
+    "page_count": 1,
+    "processed_at": "2026-10-14T18:05:00.000Z",
+    "status": "needs_review",
+    "vendor": {
+      "name": "Riverbend Plumbing & Drain LLC",
+      "address": "418 Cedar Wharf, Suite 12, Portland, OR 97214",
+      "phone": "(503) 555-0148",
+      "email": "billing@riverbendplumbing.example"
+    },
+    "bill_to": {
+      "name": "Willowbrook Property Management",
+      "attention": "Accounts Payable",
+      "address": "900 Willowbrook Drive, Portland, OR 97217"
+    },
+    "invoice": {
+      "number": "RB-20418",
+      "invoice_date": "2026-10-14",
+      "due_date": "2026-11-13",
+      "terms": "Net 30",
+      "work_order_number": "WO-77316",
+      "po_number": "PO-5521",
+      "service_date": "2026-10-13"
+    },
+    "property": {
+      "name": "Willowbrook Apartments",
+      "address": "900 Willowbrook Drive, Portland, OR 97217",
+      "unit": "2B"
+    },
+    "work_description": "Cleared a main-line clog, replaced a wax ring, and reset the kitchen disposal in unit 2B.",
+    "line_items": [
+      {
+        "description": "Main-line clearing",
+        "category": "labor",
+        "quantity": 2,
+        "unit_price": 125,
+        "amount": 250
+      },
+      {
+        "description": "Disposal reset",
+        "category": "labor",
+        "quantity": 1,
+        "unit_price": 95,
+        "amount": 95
+      },
+      {
+        "description": "Wax ring kit",
+        "category": "parts",
+        "quantity": 1,
+        "unit_price": 48.55,
+        "amount": 48.55
+      },
+      {
+        "description": "Braided supply line",
+        "category": "parts",
+        "quantity": 2,
+        "unit_price": 14.5,
+        "amount": 29
+      },
+      {
+        "description": "After-hours trip fee",
+        "category": "fee",
+        "quantity": 1,
+        "unit_price": 45,
+        "amount": 45
+      },
+      {
+        "description": "Disposal permit",
+        "category": "other",
+        "quantity": 1,
+        "unit_price": 25,
+        "amount": 25
+      }
+    ],
+    "totals": {
+      "currency": "USD",
+      "subtotal": 492.55,
+      "tax_description": "State sales tax",
+      "tax_amount": 3.5,
+      "total_due": 496.05
+    },
+    "remit_to": {
+      "name": "Riverbend Plumbing & Drain LLC",
+      "address": "418 Cedar Wharf, Suite 12, Portland, OR 97214",
+      "payment_notes": "ACH preferred. Include invoice number RB-20418 on the payment."
+    },
+    "late_fee_terms": "1.5% per month on balances unpaid after the due date.",
+    "validation": {
+      "checks": [
+        {
+          "name": "Line items match subtotal",
+          "passed": true,
+          "message": "The six line items add up to 492.55."
+        },
+        {
+          "name": "Total matches subtotal and tax",
+          "passed": true,
+          "message": "Total due equals the subtotal plus tax."
+        },
+        {
+          "name": "Vendor phone confidence",
+          "passed": false,
+          "message": "Vendor phone was read with low confidence."
+        },
+        {
+          "name": "PO number confidence",
+          "passed": false,
+          "message": "PO number was read with low confidence."
+        }
+      ]
+    },
+    "field_meta": {
+      "invoice.number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.invoice_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.due_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.terms": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.work_order_number": {
+        "confidence": 0.72,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.po_number": {
+        "confidence": 0.38,
+        "source_page": 1,
+        "needs_review": true
+      },
+      "invoice.service_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.phone": {
+        "confidence": 0.41,
+        "source_page": 1,
+        "needs_review": true
+      },
+      "vendor.email": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.attention": {
+        "confidence": 0.66,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.unit": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "work_description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.subtotal": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.tax_description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.tax_amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.total_due": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.payment_notes": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "late_fee_terms": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.2.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.2.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.2.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.2.unit_price": {
+        "confidence": 0.64,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.2.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.3.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.3.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.3.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.3.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.3.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.4.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.4.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.4.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.4.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.4.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.5.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.5.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.5.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.5.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.5.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      }
+    }
+  },
+  {
+    "document_id": "doc_hg_1182",
+    "document_type": "vendor_invoice",
+    "source_file": "HG-1182-harborline.pdf",
+    "page_count": 1,
+    "processed_at": "2026-09-02T15:40:00.000Z",
+    "status": "approved",
+    "vendor": {
+      "name": "Harborline Glass Co.",
+      "address": "88 Pier Street, Portland, OR 97209",
+      "phone": "(503) 555-0172",
+      "email": "ar@harborlineglass.example"
+    },
+    "bill_to": {
+      "name": "Maple Court HOA",
+      "attention": "Building Manager",
+      "address": "1200 Maple Court, Portland, OR 97211"
+    },
+    "invoice": {
+      "number": "HG-1182",
+      "invoice_date": "2026-09-02",
+      "due_date": "2026-10-02",
+      "terms": "Net 30",
+      "work_order_number": "WO-66012",
+      "po_number": "PO-4419",
+      "service_date": "2026-09-01"
+    },
+    "property": {
+      "name": "Maple Court",
+      "address": "1200 Maple Court, Portland, OR 97211",
+      "unit": "4A"
+    },
+    "work_description": "Replaced a failed window seal and set a tempered pane in unit 4A.",
+    "line_items": [
+      {
+        "description": "Window seal repair",
+        "category": "labor",
+        "quantity": 1,
+        "unit_price": 180,
+        "amount": 180
+      },
+      {
+        "description": "Tempered pane",
+        "category": "parts",
+        "quantity": 1,
+        "unit_price": 42,
+        "amount": 42
+      }
+    ],
+    "totals": {
+      "currency": "USD",
+      "subtotal": 222,
+      "tax_description": "No tax",
+      "tax_amount": 0,
+      "total_due": 222
+    },
+    "remit_to": {
+      "name": "Harborline Glass Co.",
+      "address": "88 Pier Street, Portland, OR 97209",
+      "payment_notes": "Check or ACH. Reference invoice HG-1182."
+    },
+    "late_fee_terms": "Balances past due accrue a flat $25 fee after 15 days.",
+    "validation": {
+      "checks": [
+        {
+          "name": "Line items match subtotal",
+          "passed": true,
+          "message": "Line items add up to the subtotal."
+        },
+        {
+          "name": "Total matches subtotal and tax",
+          "passed": true,
+          "message": "Total due equals the subtotal."
+        }
+      ]
+    },
+    "field_meta": {
+      "invoice.number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.invoice_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.due_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.terms": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.work_order_number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.po_number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.service_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.phone": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.email": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.attention": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.unit": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "work_description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.subtotal": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.tax_description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.tax_amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.total_due": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.payment_notes": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "late_fee_terms": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.1.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      }
+    }
+  },
+  {
+    "document_id": "doc_cc_4410",
+    "document_type": "vendor_invoice",
+    "source_file": "CC-4410-cedar.pdf",
+    "page_count": 1,
+    "processed_at": "2026-08-19T21:12:00.000Z",
+    "status": "rejected",
+    "vendor": {
+      "name": "Cedar & Co. HVAC",
+      "address": "15 Industrial Way, Portland, OR 97230",
+      "phone": "(503) 555-0194",
+      "email": "billing@cedarhvac.example"
+    },
+    "bill_to": {
+      "name": "Hillcrest Commons",
+      "attention": "Facilities",
+      "address": "640 Hillcrest Avenue, Portland, OR 97214"
+    },
+    "invoice": {
+      "number": "CC-4410",
+      "invoice_date": "2026-08-19",
+      "due_date": "2026-09-18",
+      "terms": "Net 30",
+      "work_order_number": "WO-10220",
+      "po_number": "PO-3308",
+      "service_date": "2026-08-18"
+    },
+    "property": {
+      "name": "Hillcrest Commons",
+      "address": "640 Hillcrest Avenue, Portland, OR 97214",
+      "unit": "12"
+    },
+    "work_description": "Diagnosed a rooftop unit that would not hold a call for cooling.",
+    "line_items": [
+      {
+        "description": "Diagnostic visit",
+        "category": "fee",
+        "quantity": 1,
+        "unit_price": 75,
+        "amount": 75
+      }
+    ],
+    "totals": {
+      "currency": "USD",
+      "subtotal": 75,
+      "tax_description": "No tax",
+      "tax_amount": 0,
+      "total_due": 75
+    },
+    "remit_to": {
+      "name": "Cedar & Co. HVAC",
+      "address": "15 Industrial Way, Portland, OR 97230",
+      "payment_notes": "Do not mail checks. ACH only."
+    },
+    "late_fee_terms": "Unpaid invoices are subject to a 2% monthly finance charge.",
+    "validation": {
+      "checks": [
+        {
+          "name": "Line items match subtotal",
+          "passed": true,
+          "message": "The diagnostic fee matches the subtotal."
+        },
+        {
+          "name": "Work order present",
+          "passed": false,
+          "message": "Work order number was not found on the document."
+        }
+      ]
+    },
+    "field_meta": {
+      "invoice.number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.invoice_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.due_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.terms": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.work_order_number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.po_number": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "invoice.service_date": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.phone": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "vendor.email": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.attention": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "bill_to.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "property.unit": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "work_description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.subtotal": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.tax_description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.tax_amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "totals.total_due": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.name": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.address": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "remit_to.payment_notes": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "late_fee_terms": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.description": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.category": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.quantity": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.unit_price": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      },
+      "line_items.0.amount": {
+        "confidence": 0.96,
+        "source_page": 1,
+        "needs_review": false
+      }
+    }
+  }
+]

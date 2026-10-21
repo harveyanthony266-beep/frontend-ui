@@ -26,6 +26,7 @@ export default function Dashboard() {
         </p>
         {ready && <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/upload" className="inline-flex items-center gap-2 rounded-lg bg-emerald px-4 py-2.5 text-sm font-semibold text-ink"><FileUp size={16} aria-hidden="true" /> Upload documents</Link>
+          <Link href="/review" className="inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-white hover:bg-white/5"><FileCheck2 size={16} aria-hidden="true" /> Review invoices</Link>
           <Link href="/invoices" className="inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-white hover:bg-white/5"><Archive size={16} aria-hidden="true" /> Open archive</Link>
         </div>}
       </div>
