@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { applyRetryResponse, invoicesFromUploadResponse, parseDeleteResult } from '@/lib/invoice-review/actions.ts';
 import { readPath, valuesMatch, writePath } from '@/lib/invoice-review/edit.ts';
 import { invoiceToCsv } from '@/lib/invoice-review/export.ts';
 import { confidenceLevel, flaggedFieldCount, formatMoney } from '@/lib/invoice-review/format.ts';
@@ -75,9 +76,11 @@ test('review screen keeps the mock switch and the backend route notes', async ()
   const page = await readFile(new URL('../app/review/page.tsx', import.meta.url), 'utf8');
   const layout = await readFile(new URL('../components/layout.tsx', import.meta.url), 'utf8');
   const row = await readFile(new URL('../components/invoice-review/invoice-review-row.tsx', import.meta.url), 'utf8');
-  assert.match(loader, /export const USE_INVOICE_REVIEW_MOCK = true/);
+  assert.match(loader, /export const USE_INVOICE_REVIEW_MOCK = false/);
   assert.match(loader, /\/api\/backend\/invoices/);
   assert.match(loader, /\/api\/backend\/documents\/\$\{encodeURIComponent\(documentId\)\}\/approve/);
+  assert.match(loader, /\/retry/);
+  assert.match(loader, /JSON\.stringify\(\{ ids \}\)/);
   assert.match(loader, /x-organization-id/);
   assert.match(page, /workspaceStatus === 'ready'/);
   assert.match(layout, /\['\/review', 'Invoice review'/);
@@ -103,4 +106,55 @@ test('review screen keeps the mock switch and the backend route notes', async ()
     assert.notEqual(next, -1, heading);
     cursor = next;
   }
+});
+
+test('failed extractions keep the source file and error message', () => {
+  const [failed] = parseInvoiceReviews({
+    document_id: 'doc_failed',
+    source_file: 'unreadable.pdf',
+    status: 'failed',
+    error: { message: 'The page could not be read.', retryable: true },
+  });
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.source_file, 'unreadable.pdf');
+  assert.equal(failed.error?.message, 'The page could not be read.');
+  assert.equal(failed.error?.retryable, true);
+});
+
+test('a retry response can stop further retries and explain why', () => {
+  const [failed] = parseInvoiceReviews({
+    document_id: 'doc_failed',
+    source_file: 'unreadable.pdf',
+    status: 'failed',
+    error: { message: 'The page could not be read.', retryable: true },
+  });
+  const stopped = applyRetryResponse(failed, { retryable: false, reason: 'This file type is not supported.' });
+  assert.equal(stopped.error?.retryable, false);
+  assert.equal(stopped.error?.reason, 'This file type is not supported.');
+  const recovered = applyRetryResponse(failed, { ...riverbend, document_id: 'doc_failed' });
+  assert.equal(recovered.status, 'needs_review');
+  assert.equal(recovered.invoice.number, 'RB-20418');
+});
+
+test('an upload response is added from the API body', () => {
+  const uploaded = invoicesFromUploadResponse({
+    results: [{ success: true, data: riverbend }],
+  });
+  assert.equal(uploaded.length, 1);
+  assert.equal(uploaded[0].document_id, riverbend.document_id);
+  const failedUpload = invoicesFromUploadResponse({
+    results: [{ success: false, id: 'doc_bad', filename: 'scan.pdf', message: 'Extraction failed.' }],
+  });
+  assert.equal(failedUpload[0].status, 'failed');
+  assert.equal(failedUpload[0].source_file, 'scan.pdf');
+  assert.equal(failedUpload[0].error?.message, 'Extraction failed.');
+});
+
+test('bulk delete keeps failed ids and drops the ones that succeeded', () => {
+  const result = parseDeleteResult(['a', 'b'], {
+    deleted: ['a'],
+    failed: [{ id: 'b', message: 'Still processing.' }],
+  }, 'Could not delete this invoice review.');
+  assert.deepEqual(result.deletedIds, ['a']);
+  assert.deepEqual(result.failed, [{ id: 'b', message: 'Still processing.' }]);
 });

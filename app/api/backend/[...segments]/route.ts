@@ -20,9 +20,10 @@ const allowedRoutes: Record<string, string[]> = {
     'webhooks/process-invoice',
     'documents/export',
     'documents/:id/approve',
+    'documents/:id/retry',
   ],
   PATCH: ['documents/:id'],
-  DELETE: ['documents/:id'],
+  DELETE: ['documents', 'documents/:id'],
 };
 
 function errorResponse(status: number, error: string, message: string) {

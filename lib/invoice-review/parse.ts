@@ -1,12 +1,13 @@
 import type {
   FieldMeta,
+  InvoiceExtractionError,
   InvoiceLineItem,
   InvoiceReviewStatus,
   LineItemCategory,
   VendorInvoice,
 } from '@/lib/invoice-review/types';
 
-const STATUSES: InvoiceReviewStatus[] = ['needs_review', 'approved', 'rejected'];
+const STATUSES: InvoiceReviewStatus[] = ['needs_review', 'approved', 'rejected', 'failed', 'processing'];
 const CATEGORIES: LineItemCategory[] = ['labor', 'parts', 'fee', 'other'];
 
 function asRecord(value: unknown, label: string): Record<string, unknown> {
@@ -61,11 +62,125 @@ function parseLineItem(value: unknown, index: number): InvoiceLineItem {
   };
 }
 
+function textValue(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+export function normalizeInvoiceRecord(value: unknown) {
+  const record = asRecord(value, 'Invoice');
+  const normalized = { ...record };
+  if (typeof normalized.document_id !== 'string' && typeof normalized.id === 'string') {
+    normalized.document_id = normalized.id;
+  }
+  if (typeof normalized.source_file !== 'string') {
+    const filename = normalized.original_filename ?? normalized.filename;
+    if (typeof filename === 'string') normalized.source_file = filename;
+  }
+  return normalized;
+}
+
+function parseError(value: unknown): InvoiceExtractionError | null {
+  if (typeof value === 'string' && value.trim()) return { message: value };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const message = textValue(record.message);
+  const reason = textValue(record.reason);
+  const retryable = typeof record.retryable === 'boolean' ? record.retryable : undefined;
+  if (!message && !reason && retryable === undefined) return null;
+  return {
+    message,
+    ...(reason ? { reason } : {}),
+    ...(retryable === undefined ? {} : { retryable }),
+  };
+}
+
+function parsePartialInvoice(record: Record<string, unknown>, status: 'failed' | 'processing'): VendorInvoice {
+  const vendor = asRecord(record.vendor ?? {}, 'vendor');
+  const billTo = asRecord(record.bill_to ?? {}, 'bill_to');
+  const invoice = asRecord(record.invoice ?? {}, 'invoice');
+  const property = asRecord(record.property ?? {}, 'property');
+  const totals = asRecord(record.totals ?? {}, 'totals');
+  const remitTo = asRecord(record.remit_to ?? {}, 'remit_to');
+  const validation = asRecord(record.validation ?? { checks: [] }, 'validation');
+  const checks = Array.isArray(validation.checks) ? validation.checks : [];
+  const lineItems = Array.isArray(record.line_items) ? record.line_items : [];
+  const documentType = record.document_type ?? 'vendor_invoice';
+  if (documentType !== 'vendor_invoice') {
+    throw new Error('Invoice document_type must be vendor_invoice.');
+  }
+  const documentId = textValue(record.document_id);
+  if (!documentId) throw new Error('document_id is missing from the invoice response.');
+  return {
+    document_id: documentId,
+    document_type: 'vendor_invoice',
+    source_file: textValue(record.source_file),
+    page_count: asNumber(record.page_count, 'page_count'),
+    processed_at: textValue(record.processed_at),
+    status,
+    processing: record.processing === true || status === 'processing',
+    error: parseError(record.error),
+    vendor: {
+      name: textValue(vendor.name),
+      address: textValue(vendor.address),
+      phone: textValue(vendor.phone),
+      email: textValue(vendor.email),
+    },
+    bill_to: {
+      name: textValue(billTo.name),
+      attention: textValue(billTo.attention),
+      address: textValue(billTo.address),
+    },
+    invoice: {
+      number: textValue(invoice.number),
+      invoice_date: textValue(invoice.invoice_date),
+      due_date: textValue(invoice.due_date),
+      terms: textValue(invoice.terms),
+      work_order_number: textValue(invoice.work_order_number),
+      po_number: textValue(invoice.po_number),
+      service_date: textValue(invoice.service_date),
+    },
+    property: {
+      name: textValue(property.name),
+      address: textValue(property.address),
+      unit: textValue(property.unit),
+    },
+    work_description: textValue(record.work_description),
+    line_items: lineItems.map((item, itemIndex) => parseLineItem(item, itemIndex)),
+    totals: {
+      currency: textValue(totals.currency) || 'USD',
+      subtotal: asNumber(totals.subtotal, 'totals.subtotal'),
+      tax_description: textValue(totals.tax_description),
+      tax_amount: asNumber(totals.tax_amount, 'totals.tax_amount'),
+      total_due: asNumber(totals.total_due, 'totals.total_due'),
+    },
+    remit_to: {
+      name: textValue(remitTo.name),
+      address: textValue(remitTo.address),
+      payment_notes: textValue(remitTo.payment_notes),
+    },
+    late_fee_terms: textValue(record.late_fee_terms),
+    validation: {
+      checks: checks.map((check, checkIndex) => {
+        const item = asRecord(check, `validation.checks[${checkIndex}]`);
+        return {
+          name: textValue(item.name),
+          passed: item.passed === true,
+          message: textValue(item.message),
+        };
+      }),
+    },
+    field_meta: record.field_meta ? parseFieldMeta(record.field_meta) : {},
+  };
+}
+
 export function parseInvoiceReview(value: unknown, index = 0): VendorInvoice {
-  const record = asRecord(value, `Invoice ${index + 1}`);
+  const record = normalizeInvoiceRecord(value);
   const status = record.status;
   if (typeof status !== 'string' || !STATUSES.includes(status as InvoiceReviewStatus)) {
-    throw new Error('Invoice status must be needs_review, approved, or rejected.');
+    throw new Error('Invoice status must be needs_review, approved, rejected, failed, or processing.');
+  }
+  if (status === 'failed' || status === 'processing') {
+    return parsePartialInvoice(record, status);
   }
   if (record.document_type !== 'vendor_invoice') {
     throw new Error('Invoice document_type must be vendor_invoice.');
@@ -91,6 +206,8 @@ export function parseInvoiceReview(value: unknown, index = 0): VendorInvoice {
     page_count: asNumber(record.page_count, 'page_count'),
     processed_at: asString(record.processed_at, 'processed_at'),
     status: status as InvoiceReviewStatus,
+    processing: record.processing === true,
+    error: parseError(record.error),
     vendor: {
       name: asString(vendor.name, 'vendor.name'),
       address: asString(vendor.address, 'vendor.address'),

@@ -5,6 +5,8 @@ const STATUS_LABELS: Record<InvoiceReviewStatus, string> = {
   needs_review: 'Needs review',
   approved: 'Approved',
   rejected: 'Rejected',
+  failed: 'Extraction failed',
+  processing: 'Processing',
 };
 
 export function confidenceLevel(confidence: number): 'high' | 'medium' | 'low' {

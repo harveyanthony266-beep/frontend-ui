@@ -1,4 +1,10 @@
-export type InvoiceReviewStatus = 'needs_review' | 'approved' | 'rejected';
+export type InvoiceReviewStatus = 'needs_review' | 'approved' | 'rejected' | 'failed' | 'processing';
+
+export type InvoiceExtractionError = {
+  message: string;
+  retryable?: boolean;
+  reason?: string;
+};
 
 export type LineItemCategory = 'labor' | 'parts' | 'fee' | 'other';
 
@@ -23,6 +29,8 @@ export type VendorInvoice = {
   page_count: number;
   processed_at: string;
   status: InvoiceReviewStatus;
+  processing?: boolean;
+  error?: InvoiceExtractionError | null;
   vendor: {
     name: string;
     address: string;
