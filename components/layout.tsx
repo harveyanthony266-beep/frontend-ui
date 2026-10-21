@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Archive, LayoutDashboard, LockKeyhole, UploadCloud, X } from 'lucide-react';
+import { Archive, FileCheck2, LayoutDashboard, LockKeyhole, UploadCloud, X } from 'lucide-react';
 import { useWorkspace } from '@/components/workspace-provider';
 
 const links = [
   ['/', 'Overview', LayoutDashboard],
   ['/upload', 'Upload documents', UploadCloud],
+  ['/review', 'Invoice review', FileCheck2],
   ['/invoices', 'Document archive', Archive],
 ] as const;
 
