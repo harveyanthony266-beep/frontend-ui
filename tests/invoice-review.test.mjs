@@ -108,6 +108,45 @@ test('review screen keeps the mock switch and the backend route notes', async ()
   }
 });
 
+test('live invoices are shown when document_type is not vendor_invoice', () => {
+  const invoices = parseInvoiceReviews({
+    data: [{
+      id: 'doc_live',
+      document_type: 'invoice',
+      status: 'needs_review',
+      vendor_name: 'Riverbend Plumbing & Drain LLC',
+      invoice_number: 'RB-20418',
+      total_amount: 496.05,
+      currency: 'USD',
+      due_date: '2026-11-13',
+      original_filename: 'RB-20418.pdf',
+    }, {
+      document_id: 'doc_failed_pdf',
+      document_type: 'pdf',
+      status: 'failed',
+      source_file: 'scan.pdf',
+      error: { message: 'The page could not be read.' },
+    }],
+  });
+  assert.equal(invoices.length, 2);
+  const invoice = invoices[0];
+  assert.equal(invoice.document_id, 'doc_live');
+  assert.equal(invoice.vendor.name, 'Riverbend Plumbing & Drain LLC');
+  assert.equal(invoice.invoice.number, 'RB-20418');
+  assert.equal(invoice.totals.total_due, 496.05);
+  assert.equal(invoice.source_file, 'RB-20418.pdf');
+  assert.equal(invoice.status, 'needs_review');
+  const failed = parseInvoiceReviews({
+    document_id: 'doc_failed_pdf',
+    document_type: 'pdf',
+    status: 'failed',
+    source_file: 'scan.pdf',
+    error: { message: 'The page could not be read.' },
+  })[0];
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.error?.message, 'The page could not be read.');
+});
+
 test('failed extractions keep the source file and error message', () => {
   const [failed] = parseInvoiceReviews({
     document_id: 'doc_failed',
