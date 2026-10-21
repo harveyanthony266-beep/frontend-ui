@@ -104,10 +104,6 @@ function parsePartialInvoice(record: Record<string, unknown>, status: 'failed' |
   const validation = asRecord(record.validation ?? { checks: [] }, 'validation');
   const checks = Array.isArray(validation.checks) ? validation.checks : [];
   const lineItems = Array.isArray(record.line_items) ? record.line_items : [];
-  const documentType = record.document_type ?? 'vendor_invoice';
-  if (documentType !== 'vendor_invoice') {
-    throw new Error('Invoice document_type must be vendor_invoice.');
-  }
   const documentId = textValue(record.document_id);
   if (!documentId) throw new Error('document_id is missing from the invoice response.');
   return {
@@ -173,7 +169,122 @@ function parsePartialInvoice(record: Record<string, unknown>, status: 'failed' |
   };
 }
 
-export function parseInvoiceReview(value: unknown, index = 0): VendorInvoice {
+function nestedRecord(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function mapStatus(value: unknown): InvoiceReviewStatus {
+  if (typeof value === 'string' && STATUSES.includes(value as InvoiceReviewStatus)) {
+    return value as InvoiceReviewStatus;
+  }
+  return 'needs_review';
+}
+
+function looseLineItem(value: unknown): InvoiceLineItem {
+  const item = nestedRecord(value);
+  const category = typeof item.category === 'string' && CATEGORIES.includes(item.category as LineItemCategory)
+    ? item.category as LineItemCategory
+    : 'other';
+  const amount = asNumber(item.amount, 'amount');
+  return {
+    description: textValue(item.description),
+    quantity: asNumber(item.quantity ?? 1, 'quantity'),
+    unit_price: asNumber(item.unit_price ?? item.price ?? amount, 'unit_price'),
+    amount,
+    category,
+  };
+}
+
+function safeFieldMeta(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  try {
+    return parseFieldMeta(value);
+  } catch {
+    return {};
+  }
+}
+
+function looseInvoice(record: Record<string, unknown>): VendorInvoice {
+  const status = mapStatus(record.status);
+  const vendor = nestedRecord(record.vendor);
+  const billTo = nestedRecord(record.bill_to);
+  const invoice = nestedRecord(record.invoice);
+  const property = nestedRecord(record.property);
+  const totals = nestedRecord(record.totals);
+  const remitTo = nestedRecord(record.remit_to);
+  const validation = nestedRecord(record.validation);
+  const checks = Array.isArray(validation.checks) ? validation.checks : [];
+  const reasons = Array.isArray(record.review_reasons)
+    ? record.review_reasons.filter((reason): reason is string => typeof reason === 'string').join('; ')
+    : '';
+  const error = parseError(record.error) ?? (status === 'failed' && reasons ? { message: reasons, retryable: true } : null);
+  const documentId = textValue(record.document_id);
+  if (!documentId) throw new Error('document_id is missing from the invoice response.');
+  return {
+    document_id: documentId,
+    document_type: 'vendor_invoice',
+    source_file: textValue(record.source_file),
+    page_count: asNumber(record.page_count, 'page_count'),
+    processed_at: textValue(record.processed_at) || textValue(record.created_at),
+    status,
+    processing: record.processing === true || status === 'processing',
+    error,
+    vendor: {
+      name: textValue(vendor.name) || textValue(record.vendor_name),
+      address: textValue(vendor.address),
+      phone: textValue(vendor.phone),
+      email: textValue(vendor.email),
+    },
+    bill_to: {
+      name: textValue(billTo.name),
+      attention: textValue(billTo.attention),
+      address: textValue(billTo.address),
+    },
+    invoice: {
+      number: textValue(invoice.number) || textValue(record.invoice_number) || textValue(record.document_number),
+      invoice_date: textValue(invoice.invoice_date) || textValue(record.invoice_date) || textValue(record.document_date),
+      due_date: textValue(invoice.due_date) || textValue(record.due_date),
+      terms: textValue(invoice.terms),
+      work_order_number: textValue(invoice.work_order_number),
+      po_number: textValue(invoice.po_number),
+      service_date: textValue(invoice.service_date),
+    },
+    property: {
+      name: textValue(property.name),
+      address: textValue(property.address),
+      unit: textValue(property.unit),
+    },
+    work_description: textValue(record.work_description),
+    line_items: Array.isArray(record.line_items) ? record.line_items.map((item) => looseLineItem(item)) : [],
+    totals: {
+      currency: textValue(totals.currency) || textValue(record.currency) || 'USD',
+      subtotal: asNumber(totals.subtotal, 'subtotal'),
+      tax_description: textValue(totals.tax_description),
+      tax_amount: asNumber(totals.tax_amount, 'tax_amount'),
+      total_due: asNumber(totals.total_due ?? record.total_amount, 'total_due'),
+    },
+    remit_to: {
+      name: textValue(remitTo.name),
+      address: textValue(remitTo.address),
+      payment_notes: textValue(remitTo.payment_notes),
+    },
+    late_fee_terms: textValue(record.late_fee_terms),
+    validation: {
+      checks: checks.map((check) => {
+        const item = nestedRecord(check);
+        return {
+          name: textValue(item.name),
+          passed: item.passed === true,
+          message: textValue(item.message),
+        };
+      }),
+    },
+    field_meta: safeFieldMeta(record.field_meta),
+  };
+}
+
+function parseKnownInvoice(value: unknown, index = 0): VendorInvoice {
   const record = normalizeInvoiceRecord(value);
   const status = record.status;
   if (typeof status !== 'string' || !STATUSES.includes(status as InvoiceReviewStatus)) {
@@ -181,9 +292,6 @@ export function parseInvoiceReview(value: unknown, index = 0): VendorInvoice {
   }
   if (status === 'failed' || status === 'processing') {
     return parsePartialInvoice(record, status);
-  }
-  if (record.document_type !== 'vendor_invoice') {
-    throw new Error('Invoice document_type must be vendor_invoice.');
   }
   const vendor = asRecord(record.vendor, 'vendor');
   const billTo = asRecord(record.bill_to, 'bill_to');
@@ -265,6 +373,15 @@ export function parseInvoiceReview(value: unknown, index = 0): VendorInvoice {
   };
 }
 
+export function parseInvoiceReview(value: unknown, index = 0): VendorInvoice {
+  try {
+    return parseKnownInvoice(value, index);
+  } catch (error) {
+    if (!value || typeof value !== 'object') throw error;
+    return looseInvoice(normalizeInvoiceRecord(value));
+  }
+}
+
 export function parseInvoiceReviews(payload: unknown): VendorInvoice[] {
   if (Array.isArray(payload)) {
     return payload.map((item, index) => parseInvoiceReview(item, index));
@@ -272,7 +389,7 @@ export function parseInvoiceReviews(payload: unknown): VendorInvoice[] {
   if (payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)) {
     return (payload as { data: unknown[] }).data.map((item, index) => parseInvoiceReview(item, index));
   }
-  if (payload && typeof payload === 'object' && 'document_id' in payload) {
+  if (payload && typeof payload === 'object' && ('document_id' in payload || 'id' in payload)) {
     return [parseInvoiceReview(payload)];
   }
   throw new Error('The invoice response was not a list of invoices.');
