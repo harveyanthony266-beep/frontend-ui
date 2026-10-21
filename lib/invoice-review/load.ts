@@ -1,36 +1,32 @@
-import sampleInvoices from '@/lib/invoice-review/invoice-review.mock.json';
+import { applyRetryResponse, parseDeleteResult, type DeleteResult } from '@/lib/invoice-review/actions';
 import { parseInvoiceReviews } from '@/lib/invoice-review/parse';
 import type { VendorInvoice } from '@/lib/invoice-review/types';
 
 /**
- * The review screen reads sample invoices until this flag is turned off.
+ * The review list loads GET /api/backend/invoices. Set this to true only to
+ * read invoice-review.mock.json instead of that response.
  *
- * To use the backend response:
- * 1. Set USE_INVOICE_REVIEW_MOCK to false.
- * 2. The screen then calls GET /api/backend/invoices with the x-organization-id
- *    header. The BFF allowlists that path and attaches the organization API key
- *    on the server. The body may be one invoice, an array, or { data: [...] }
- *    using the same field names as invoice-review.mock.json.
- * 3. Approve calls POST /api/backend/documents/:document_id/approve.
- *    Reject and inline edits stay in this review session. Persist an edit with
- *    PATCH /api/backend/documents/:document_id once that payload is defined.
- *    Excel and CSV are built in the browser from the reviewed invoice, and
- *    only after Approve.
+ * Retry calls POST /api/backend/documents/:document_id/retry.
+ * One delete calls DELETE /api/backend/documents/:document_id.
+ * Bulk delete calls DELETE /api/backend/documents with { ids }.
+ * Approve calls POST /api/backend/documents/:document_id/approve.
+ * The browser sends x-organization-id. The BFF attaches the organization API key.
  */
-export const USE_INVOICE_REVIEW_MOCK = true;
+export const USE_INVOICE_REVIEW_MOCK = false;
 
-async function readError(response: Response) {
+async function readError(response: Response, fallback = 'Could not load invoices.') {
   try {
     const result = await response.json();
-    return typeof result.message === 'string' ? result.message : 'Could not load invoices.';
+    return typeof result.message === 'string' ? result.message : fallback;
   } catch {
-    return 'Could not load invoices.';
+    return fallback;
   }
 }
 
 export async function fetchInvoiceReviews(organizationId: string): Promise<VendorInvoice[]> {
   if (USE_INVOICE_REVIEW_MOCK) {
-    return parseInvoiceReviews(sampleInvoices);
+    const sample = await import('@/lib/invoice-review/invoice-review.mock.json');
+    return parseInvoiceReviews(sample.default);
   }
   const response = await fetch('/api/backend/invoices', {
     headers: { 'x-organization-id': organizationId },
@@ -51,4 +47,43 @@ export async function approveInvoiceReview(organizationId: string, documentId: s
     body: '{}',
   });
   if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function retryInvoiceReview(organizationId: string, invoice: VendorInvoice) {
+  const response = await fetch(`/api/backend/documents/${encodeURIComponent(invoice.document_id)}/retry`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-organization-id': organizationId,
+    },
+    body: '{}',
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return applyRetryResponse(invoice, await response.json());
+}
+
+export async function deleteInvoiceReviews(organizationId: string, ids: string[]): Promise<DeleteResult> {
+  const single = ids.length === 1;
+  const response = await fetch(
+    single ? `/api/backend/documents/${encodeURIComponent(ids[0] ?? '')}` : '/api/backend/documents',
+    {
+      method: 'DELETE',
+      headers: {
+        ...(single ? {} : { 'content-type': 'application/json' }),
+        'x-organization-id': organizationId,
+      },
+      body: single ? undefined : JSON.stringify({ ids }),
+    },
+  );
+  if (!response.ok) {
+    const message = await readError(response, 'Could not delete this invoice review.');
+    return { deletedIds: [], failed: ids.map((id) => ({ id, message })) };
+  }
+  const body = await response.text();
+  if (!body) return { deletedIds: ids, failed: [] };
+  try {
+    return parseDeleteResult(ids, JSON.parse(body), 'Could not delete this invoice review.');
+  } catch {
+    return { deletedIds: ids, failed: [] };
+  }
 }

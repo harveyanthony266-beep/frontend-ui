@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { FileUp, LoaderCircle, LockKeyhole, X } from 'lucide-react';
 import { WorkspaceSetupNotice } from '@/components/workspace-setup-notice';
 import { useWorkspace } from '@/components/workspace-provider';
+import { invoicesFromUploadResponse } from '@/lib/invoice-review/actions';
+import { rememberUploadedReviews } from '@/lib/invoice-review/session';
 
 type UploadOutcome = {
   filename: string;
@@ -73,6 +75,7 @@ export default function UploadPage() {
         throw new Error(job.error ?? 'The document batch failed.');
       }
       if (job.status === 'completed' || job.status === 'completed_with_errors') {
+        rememberUploadedReviews(organizationId, invoicesFromUploadResponse(job));
         return Array.isArray(job.results) ? job.results : [];
       }
     }
@@ -113,6 +116,7 @@ export default function UploadPage() {
         );
       }
       const result = await response.json();
+      rememberUploadedReviews(organizationId, invoicesFromUploadResponse(result));
       if (result.job_id) {
         setOutcomes(await pollJob(result.job_id));
       } else if (Array.isArray(result.results)) {
@@ -130,7 +134,8 @@ export default function UploadPage() {
       setFiles([]);
       if (inputRef.current) inputRef.current.value = '';
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
+      const message = uploadError instanceof Error ? uploadError.message : '';
+      setError(message || 'Upload failed.');
     } finally {
       setBusy(false);
     }

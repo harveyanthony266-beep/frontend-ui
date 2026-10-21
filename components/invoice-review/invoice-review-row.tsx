@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, ChevronDown, Download, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, ChevronDown, Download, Trash2, X } from 'lucide-react';
 import { ReviewField } from '@/components/invoice-review/review-field';
 import { SourcePreview } from '@/components/invoice-review/source-preview';
 import { readPath, valuesMatch, writePath } from '@/lib/invoice-review/edit';
@@ -17,14 +17,17 @@ import {
   vendorFields,
   type ReviewFieldDefinition,
 } from '@/lib/invoice-review/fields';
+import { canExpandReview, isReviewProcessing, reviewName } from '@/lib/invoice-review/actions';
 import { flaggedFieldCount, formatDate, formatMoney, statusLabel } from '@/lib/invoice-review/format';
-import { approveInvoiceReview } from '@/lib/invoice-review/load';
+import { approveInvoiceReview, retryInvoiceReview } from '@/lib/invoice-review/load';
 import type { VendorInvoice } from '@/lib/invoice-review/types';
 
 const STATUS_CLASS = {
   needs_review: 'bg-amber-400/15 text-amber-200',
   approved: 'bg-emerald/15 text-mint',
   rejected: 'bg-rose-400/15 text-rose-200',
+  failed: 'bg-rose-400/15 text-rose-200',
+  processing: 'bg-white/5 text-slate-300',
 } as const;
 
 function FieldSection({
@@ -72,37 +75,62 @@ function FieldSection({
 export function InvoiceReviewRow({
   invoice,
   expanded,
+  selected,
   onToggle,
+  onSelectedChange,
+  onDelete,
+  onUpdated,
   organizationId,
+  deleteDisabled,
 }: {
   invoice: VendorInvoice;
   expanded: boolean;
+  selected: boolean;
   onToggle: () => void;
+  onSelectedChange: (selected: boolean) => void;
+  onDelete: () => void;
+  onUpdated: (invoice: VendorInvoice) => void;
   organizationId: string;
+  deleteDisabled: boolean;
 }) {
   const panelId = `review-panel-${invoice.document_id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const toggleId = `${panelId}-toggle`;
   const [draft, setDraft] = useState(() => structuredClone(invoice));
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState('');
   const [edited, setEdited] = useState<Set<string>>(() => new Set());
   const [viewed, setViewed] = useState<Set<string>>(() => new Set());
   const [rejectReason, setRejectReason] = useState('');
   const [approving, setApproving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [actionError, setActionError] = useState('');
+  useEffect(() => {
+    setDraft(structuredClone(invoice));
+  }, [invoice]);
+
+  const expandable = canExpandReview(draft);
+  const processing = isReviewProcessing(draft);
+  const retryable = draft.error?.retryable !== false;
   const flagCount = flaggedFieldCount(invoice.field_meta);
   const failedChecks = draft.validation.checks.filter((check) => !check.passed);
   const unreviewed = Object.entries(invoice.field_meta)
     .filter(([, meta]) => meta.needs_review)
     .map(([path]) => path)
     .filter((path) => !viewed.has(path));
-  const approveReason = unreviewed.length > 0
-    ? 'Review each flagged field before approving.'
+  const approveReason = !expandable
+    ? 'Approve is unavailable when extraction has not succeeded.'
+    : unreviewed.length > 0
+      ? 'Review each flagged field before approving.'
+      : draft.status === 'approved'
+        ? 'This invoice is already approved.'
+        : approving
+          ? 'Approving this invoice.'
+          : undefined;
+  const exportReason = !expandable
+    ? 'Export is unavailable when extraction has not succeeded.'
     : draft.status === 'approved'
-      ? 'This invoice is already approved.'
-      : approving
-        ? 'Approving this invoice.'
-        : undefined;
-  const exportReason = draft.status === 'approved' ? undefined : 'Export is available after this invoice is approved.';
+      ? undefined
+      : 'Export is available after this invoice is approved.';
 
   function view(path: string) {
     setViewed((current) => {
@@ -143,6 +171,19 @@ export function InvoiceReviewRow({
     setDraft((current) => ({ ...current, status: 'rejected' }));
   }
 
+  async function retry() {
+    if (!retryable || retrying || draft.status !== 'failed') return;
+    setRetrying(true);
+    setRetryError('');
+    try {
+      onUpdated(await retryInvoiceReview(organizationId, draft));
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : 'Could not retry this extraction.');
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   async function exportWorkbook() {
     if (draft.status !== 'approved' || exporting) return;
     setExporting(true);
@@ -158,31 +199,78 @@ export function InvoiceReviewRow({
 
   const sectionProps = { draft, source: invoice, edited, onCommit: commit, onView: view };
 
+  const name = reviewName(draft);
+  const deleteTitle = processing ? 'This invoice is still processing.' : undefined;
+
   return <li className="rounded-xl border border-line bg-panel">
-    <button
-      type="button"
-      id={toggleId}
-      aria-expanded={expanded}
-      aria-controls={panelId}
-      onClick={onToggle}
-      className="flex w-full items-center gap-4 px-4 py-4 text-left hover:bg-white/[.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mint sm:px-5"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="font-medium text-white">{draft.vendor.name || 'Unknown vendor'}</span>
-          <span className="text-slate-300">{draft.invoice.number || 'No number'}</span>
-          <span className="tabular-nums text-slate-200">{formatMoney(draft.totals.total_due, draft.totals.currency || 'USD')}</span>
-          <span className="text-slate-400">Due {formatDate(draft.invoice.due_date)}</span>
-          <span className={`rounded-full px-2.5 py-1 text-xs ${STATUS_CLASS[draft.status]}`}>{statusLabel(draft.status)}</span>
-          <span className={flagCount > 0 ? 'text-xs font-medium text-amber-200' : 'text-xs text-slate-500'}>
-            {flagCount} flagged<span className="sr-only"> field{flagCount === 1 ? '' : 's'}</span>
+    <div className="flex items-start gap-3 px-4 py-4 sm:px-5">
+      <input
+        type="checkbox"
+        className="mt-1"
+        checked={selected}
+        disabled={processing || deleteDisabled}
+        onChange={(event) => onSelectedChange(event.target.checked)}
+        aria-label={`Select ${name}`}
+      />
+      {expandable ? (
+        <button
+          type="button"
+          id={toggleId}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span className="font-medium text-white">{draft.vendor.name || 'Unknown vendor'}</span>
+              <span className="text-slate-300">{draft.invoice.number || 'No number'}</span>
+              <span className="tabular-nums text-slate-200">{formatMoney(draft.totals.total_due, draft.totals.currency || 'USD')}</span>
+              <span className="text-slate-400">Due {formatDate(draft.invoice.due_date)}</span>
+              <span className={`rounded-full px-2.5 py-1 text-xs ${STATUS_CLASS[draft.status]}`}>{statusLabel(draft.status)}</span>
+              <span className={flagCount > 0 ? 'text-xs font-medium text-amber-200' : 'text-xs text-slate-500'}>
+                {flagCount} flagged<span className="sr-only"> field{flagCount === 1 ? '' : 's'}</span>
+              </span>
+            </span>
           </span>
-        </span>
-      </span>
-      <ChevronDown size={18} aria-hidden="true" className={`shrink-0 text-slate-500 transition ${expanded ? 'rotate-180' : ''}`} />
-    </button>
-    {!expanded && <div id={panelId} hidden />}
-    {expanded && <div id={panelId} role="region" aria-labelledby={toggleId}>
+          <ChevronDown size={18} aria-hidden="true" className={`shrink-0 text-slate-500 transition ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      ) : (
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs ${STATUS_CLASS[draft.status]}`}>{statusLabel(draft.status)}</span>
+            <span className="font-medium text-white">{draft.source_file || 'Uploaded file'}</span>
+          </div>
+          {draft.status === 'failed' && <p className="mt-2 text-sm text-rose-200">{draft.error?.message || 'The document could not be extracted.'}</p>}
+          {draft.status === 'failed' && !retryable && (
+            <p className="mt-1 text-xs text-slate-400">{draft.error?.reason || 'This document cannot be retried.'}</p>
+          )}
+          {retryError && <p role="alert" className="mt-2 text-sm text-rose-200">{retryError}</p>}
+        </div>
+      )}
+      {draft.status === 'failed' && retryable && (
+        <button
+          type="button"
+          onClick={() => void retry()}
+          disabled={retrying}
+          className="rounded-lg border border-line px-3 py-2 text-sm text-slate-200 hover:bg-white/5 disabled:opacity-50"
+        >
+          {retrying ? 'Retrying…' : 'Retry'}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={processing || deleteDisabled}
+        title={deleteTitle}
+        aria-label={`Delete ${name}`}
+        className="rounded p-2 text-slate-500 hover:text-rose-300 disabled:opacity-40"
+      >
+        <Trash2 size={16} aria-hidden="true" />
+      </button>
+    </div>
+    {expandable && !expanded && <div id={panelId} hidden />}
+    {expandable && expanded && <div id={panelId} role="region" aria-labelledby={toggleId}>
       {failedChecks.length > 0 && (
         <div role="alert" className="border-y border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm text-amber-100 sm:px-5">
           <p className="font-medium">Validation needs attention</p>
@@ -285,6 +373,15 @@ export function InvoiceReviewRow({
             className="rounded-lg border border-rose-900/60 px-4 py-2.5 text-sm text-rose-200 hover:bg-rose-950/30"
           >
             Reject
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={processing || deleteDisabled}
+            title={deleteTitle}
+            className="rounded-lg border border-rose-900/60 px-4 py-2.5 text-sm text-rose-200 hover:bg-rose-950/30 disabled:opacity-40"
+          >
+            Delete
           </button>
           <span className="inline-flex" {...(approveReason ? { title: approveReason } : {})}>
             <button
